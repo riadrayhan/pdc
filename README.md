@@ -1,6 +1,6 @@
-# EMI Locker - Mobile Device Management System
+# pdc
 
-A comprehensive EMI Locker solution for remotely managing device locks based on EMI payment status.
+
 
 ## Architecture
 
