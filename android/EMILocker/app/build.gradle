@@ -16,8 +16,8 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // Server URL - LOCAL PC backend on LAN
-        buildConfigField "String", "SERVER_URL", "\"http://10.24.155.162:8000/api/v1\""
+        // Server URL - Live Render API
+        buildConfigField "String", "SERVER_URL", "\"https://rr-locker-api.onrender.com/api/v1\""
 
         // ==========================================================
         // FRP (Factory Reset Protection) Google Account
@@ -83,15 +83,15 @@ android {
             minifyEnabled true
             signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "SERVER_URL", "\"http://10.24.155.162:8000/api/v1\""
+            buildConfigField "String", "SERVER_URL", "\"https://rr-locker-api.onrender.com/api/v1\""
             // Samsung + Android 13+ fix: debug APKs are always blocked
             debuggable false
         }
         debug {
             minifyEnabled false
             signingConfig signingConfigs.debug
-            // Debug also uses local PC backend
-            buildConfigField "String", "SERVER_URL", "\"http://10.24.155.162:8000/api/v1\""
+            // Debug also uses live API
+            buildConfigField "String", "SERVER_URL", "\"https://rr-locker-api.onrender.com/api/v1\""
             // CRITICAL: Use release signing for debug builds too
             // Debug-signed APKs are ALWAYS blocked by Play Protect on Android 13+
             // and Samsung rejects testOnly debug APKs during QR provisioning
