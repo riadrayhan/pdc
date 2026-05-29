@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Redis for Celery and caching
+  redis:
+    image: redis:7-alpine
+    container_name: emi_locker_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - emi_network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emi_locker_backend
+    environment:
+      - DATABASE_URL=sqlite:///./emi_locker.db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
+      - FIREBASE_CREDENTIALS_PATH=/app/firebase-credentials.json
+      - ENVIRONMENT=production
+    volumes:
+      - ./backend:/app
+      - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      - sqlite_data:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - emi_network
+    restart: unless-stopped
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emi_locker_celery_worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=sqlite:///./emi_locker.db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
+      - FIREBASE_CREDENTIALS_PATH=/app/firebase-credentials.json
+    volumes:
+      - ./backend:/app
+      - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - emi_network
+    restart: unless-stopped
+
+  # Celery Beat (Scheduler)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emi_locker_celery_beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=sqlite:///./emi_locker.db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - emi_network
+    restart: unless-stopped
+
+  # Dashboard (React Frontend)
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: emi_locker_dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - emi_network
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  redis_data:
+
+networks:
+  emi_network:
+    driver: bridge

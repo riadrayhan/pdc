@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/lock_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="32dp">
+
+        <!-- App Title -->
+        <TextView
+            android:id="@+id/tv_lock_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RR EMI Locker"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@color/white" />
+
+        <!-- Camera Preview -->
+        <FrameLayout
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_marginTop="20dp"
+            android:background="#000000">
+
+            <TextureView
+                android:id="@+id/camera_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Face detected indicator overlay -->
+            <TextView
+                android:id="@+id/tv_face_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="#80000000"
+                android:gravity="center"
+                android:padding="4dp"
+                android:text="Scanning..."
+                android:textColor="@color/green"
+                android:textSize="12sp" />
+
+        </FrameLayout>
+
+        <!-- Warning Text -->
+        <TextView
+            android:id="@+id/tv_lock_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="⚠ EMI Locker ব্রেক করা অবৈধ ও বেআইনি যা RR EMI Locker কখনই সাপোর্ট করে না।লক করা ডিভাইসটি সার্বক্ষনিক লোকেশন ট্রাক করা হচ্ছে । কেউ বা কোনো প্রতিষ্ঠান ব্রেক করার চেস্টা করলে তার বিরুদ্ধে ১০০% লিগ্যাল একশন নেওয়া হবে এবং ডিভাইস ডেড হয়ে জেতে পারে।"
+            android:textSize="15sp"
+            android:textColor="@color/red"
+            android:textStyle="bold"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- Contact Info (hidden, used by server message) -->
+        <TextView
+            android:id="@+id/tv_contact_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Contact: "
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/yellow"
+            android:visibility="gone" />
+
+        <!-- Emergency Call Number -->
+        <TextView
+            android:id="@+id/tv_emergency_call"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Emergency Call: 01568-344344"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/yellow" />
+
+        <!-- Support Info -->
+        <TextView
+            android:id="@+id/tv_support_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="Please contact your dealer to resolve this issue."
+            android:textSize="14sp"
+            android:textColor="@color/white"
+            android:alpha="0.8" />
+
+    </LinearLayout>
+
+</ScrollView>

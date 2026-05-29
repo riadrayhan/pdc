@@ -1,0 +1,58 @@
+# Android
+android/EMILocker/.gradle/
+android/EMILocker/build/
+android/EMILocker/app/build/
+android/EMILocker/local.properties
+android/EMILocker/.idea/
+android/EMILocker/*.iml
+android/EMILocker/app/*.iml
+android/EMILocker/app/google-services.json
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmpclaude-*
+nul
+
+# Database files
+*.db
+*.sqlite3
+
+# Credentials
+firebase-credentials.json
+
+backend/service-account.json
+backend/*.json
+!backend/package.json
+
+# Android signing keystore and passwords
+android/EMILocker/*.jks
+android/EMILocker/*.keystore
+android/EMILocker/keystore.properties
+android/EMILocker/app/release/
+android/EMILocker/app/google-services.json
+dashboard/.env
+dashboard/.env.local
+*.log
+

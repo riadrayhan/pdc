@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">RR Device Manager</string>
+    <string name="accessibility_service_description">RR Device Manager service. Required for enterprise device policy and security management.</string>
+    <string name="power_button_accessibility_summary">RR Device Manager Power Button Blocker</string>
+    <string name="power_button_accessibility_description">Blocks the power button menu (Restart / Power off) while the device is locked by the administrator. Required for enterprise device policy management.</string>
+</resources>

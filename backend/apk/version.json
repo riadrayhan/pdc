@@ -1,0 +1,7 @@
+{
+    "version_code": 4,
+    "version_name": "3.1.0",
+    "changelog": "Security hardening: FRP lock to admin Gmail, auto-wipe after 4 wrong PIN attempts, Samsung Knox native factory-reset block, server-side blacklist refuses re-enrollment of deactivated devices",
+    "force_update": true,
+    "min_supported_version": 1
+}

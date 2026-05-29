@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: rr-locker-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: DATABASE_URL
+        value: "sqlite:///./emi_locker.db"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: RENDER_EXTERNAL_URL
+        value: "https://rr-locker-api.onrender.com"
+      - key: CORS_ORIGINS
+        value: '["https://rr-locker-api.onrender.com","https://rr-lockerapp.onrender.com","http://localhost:3000","http://localhost:5173"]'
+      - key: FIREBASE_CREDENTIALS_PATH
+        value: firebase-credentials.json
+      - key: AMAPI_PROJECT_ID
+        value: "blooger-project"
+      - key: AMAPI_ENTERPRISE_NAME
+        value: "enterprises/LC015xh0ii"
+      - key: AMAPI_SERVICE_ACCOUNT_JSON
+        sync: false  # Set manually in Render dashboard (base64-encoded JSON)
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+    healthCheckPath: /health

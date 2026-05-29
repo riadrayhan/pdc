@@ -1,0 +1,326 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Core Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Device Management Permissions -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Runtime Permissions (granted via Device Owner API) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- NFC for technician re-provisioning (Path C) -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
+    <!-- Metadata Collection (granted silently via Device Owner on enrolled devices) -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Live screen mirror + real-time audio streaming -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Remote file manager - admin browses & downloads full storage (internal + SD). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <!-- Android 13+ granular media permissions -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Android 14+ partial media access -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <!-- Android 14+ explicit foreground service permissions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.RRLocker"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:testOnly="false"
+        tools:replace="android:testOnly"
+        tools:targetApi="35">
+
+        <!-- Main Activity -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:lockTaskMode="if_whitelisted">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Cloudflare challenge solver (transient, shown once when API is behind Turnstile) -->
+        <activity
+            android:name=".network.CloudflareSolverActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:label="Verifying server"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.RRLocker" />
+
+        <!-- Lock Screen Activity -->
+        <activity
+            android:name=".ui.LockScreenActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:directBootAware="true"
+            android:launchMode="singleTask"
+            android:lockTaskMode="if_whitelisted"
+            android:screenOrientation="portrait"
+            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="com.rrlkr.locktask"
+            android:theme="@style/Theme.RRLocker.Lock" />
+
+        <!-- Lock Task Boot Activity (transparent, holds lock task mode active) -->
+        <activity
+            android:name=".ui.LockTaskBootActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:directBootAware="true"
+            android:lockTaskMode="if_whitelisted"
+            android:taskAffinity="com.rrlkr.locktask"
+            android:theme="@style/Theme.RRLocker.Transparent" />
+
+        <!-- Enrollment Activity -->
+        <activity
+            android:name=".ui.EnrollmentActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RRLocker" />
+
+        <!-- NFC Re-provisioning Source â€” turns this phone into a technician's
+             "master phone" that can re-flash a wiped device via NFC tap.
+             Launchable from the launcher when this APK is used as a service-center tool. -->
+        <activity
+            android:name=".ui.NfcProvisioningSourceActivity"
+            android:exported="true"
+            android:label="EMI Re-Provisioning Source"
+            android:theme="@style/Theme.RRLocker" />
+
+        <!-- Device Admin Receiver -->
+        <receiver
+            android:name=".admin.EMIDeviceAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <!-- Samsung Knox Mobile Enrollment (KME) provisioning action -->
+                <action android:name="android.app.action.MANAGED_DEVICE_PROVISIONING" />
+                <!-- Android Enterprise Device Owner provisioning -->
+                <action android:name="android.app.action.DEVICE_OWNER_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot Receiver -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Network Change Receiver - Triggers re-enrollment check -->
+        <receiver
+            android:name=".receiver.NetworkChangeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Factory Reset Protection Receiver
+             NOTE: NOT a device admin! Only EMIDeviceAdminReceiver should be
+             registered as device admin. Having two device admin receivers
+             causes Samsung provisioning to fail with "Contact your IT admin".
+             FRP logic is called from EMIDeviceAdminReceiver.onProfileProvisioningComplete(). -->
+        <receiver
+            android:name=".receiver.FactoryResetProtectionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.riad.rrlkr.SETUP_FRP" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Clear Device Owner Receiver (for ADB use) -->
+        <receiver
+            android:name=".receiver.ClearDeviceOwnerReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.riad.rrlkr.CLEAR_DEVICE_OWNER" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shutdown Monitor Receiver -->
+        <receiver
+            android:name=".receiver.ShutdownMonitorReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.SCREEN_OFF" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- USB Monitor Receiver - Blocks USB data on any USB connection -->
+        <receiver
+            android:name=".receiver.USBMonitorReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
+                <action android:name="android.intent.action.POWER_CONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- FCM Service -->
+        <service
+            android:name=".service.EMIFirebaseMessagingService"
+            android:exported="false"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Foreground Service for Device Monitoring -->
+        <service
+            android:name=".service.DeviceMonitorService"
+            android:exported="false"
+            android:directBootAware="true"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="enterprise_device_policy_management" />
+        </service>
+
+        <!-- Re-enrollment Service -->
+        <service
+            android:name=".service.DeviceReEnrollService"
+            android:exported="false" />
+
+        <!-- Reboot Blocker Service -->
+        <service
+            android:name=".service.RebootBlockerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="enterprise_device_policy_management" />
+        </service>
+
+        <!-- Zero Touch Enrollment Service -->
+        <service
+            android:name=".service.ZeroTouchEnrollmentService"
+            android:exported="false"
+            android:directBootAware="true"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="enterprise_zero_touch_provisioning" />
+        </service>
+
+        <!-- Power Button Intercept Accessibility Service.
+             Used to block the power menu (Restart / Power off) while the
+             device is locked. Device Owner permits this service silently
+             via setPermittedAccessibilityServices(null). -->
+        <service
+            android:name=".service.PowerButtonInterceptService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/power_button_accessibility_service" />
+        </service>
+
+        <!-- Live screen mirror foreground service.
+             Uses MediaProjection â€” Android forces a persistent notification. -->
+        <service
+            android:name=".streaming.ScreenMirrorService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- Live audio streaming foreground service. -->
+        <service
+            android:name=".streaming.AudioStreamService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaProjection" />
+
+        <!-- Remote file manager foreground service. -->
+        <service
+            android:name=".filemanager.FileManagerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="enterprise_device_policy_management" />
+        </service>
+
+        <!-- Transparent activity that requests MediaProjection consent. -->
+        <activity
+            android:name=".streaming.ProjectionRequestActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleTop" />
+
+        <!-- FCM Service -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
