@@ -33,7 +33,6 @@ services:
   - type: web
     name: rr-locker-dashboard
     runtime: static
-    plan: free
     rootDir: dashboard
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
