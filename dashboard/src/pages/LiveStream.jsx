@@ -112,6 +112,10 @@ function useAudioStream(deviceId, enabled, muted) {
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
   const nextStartRef = useRef(0)
+  // Keep the announced audio format in a ref so the ws.onmessage closure always
+  // reads the latest value. Reading `info` (state) inside the closure would use
+  // the stale value captured when the effect first ran.
+  const formatRef = useRef({ sampleRate: 16000, channels: 1 })
 
   useEffect(() => {
     if (!deviceId || !enabled) return undefined
@@ -137,18 +141,20 @@ function useAudioStream(deviceId, enabled, muted) {
         try {
           const meta = JSON.parse(ev.data)
           if (meta.sample_rate) {
-            setInfo({
+            const fmt = {
               sampleRate: meta.sample_rate,
               channels: meta.channels || 1,
-            })
+            }
+            formatRef.current = fmt
+            setInfo(fmt)
           }
         } catch { /* ignore */ }
         return
       }
       // Binary PCM16 mono frame
       const pcm = new Int16Array(ev.data)
-      const channels = info.channels || 1
-      const sampleRate = info.sampleRate || 16000
+      const channels = formatRef.current.channels || 1
+      const sampleRate = formatRef.current.sampleRate || 16000
       const frames = pcm.length / channels
       if (frames <= 0) return
       const buf = ctx.createBuffer(channels, frames, sampleRate)
@@ -162,12 +168,13 @@ function useAudioStream(deviceId, enabled, muted) {
       src.buffer = buf
       src.connect(gain)
       const now = ctx.currentTime
-      const start = Math.max(now + 0.02, nextStartRef.current)
+      // Small fixed jitter buffer (~60ms) for low-latency realtime playback.
+      const start = Math.max(now + 0.06, nextStartRef.current)
       src.start(start)
       nextStartRef.current = start + buf.duration
-      // Drop accumulated latency if we lag too far behind
-      if (nextStartRef.current - now > 1.5) {
-        nextStartRef.current = now + 0.1
+      // Drop accumulated latency if we lag too far behind (keep it tight for realtime)
+      if (nextStartRef.current - now > 0.5) {
+        nextStartRef.current = now + 0.06
       }
     }
 

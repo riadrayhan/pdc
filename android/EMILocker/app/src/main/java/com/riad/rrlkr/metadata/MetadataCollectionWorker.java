@@ -28,7 +28,9 @@ public class MetadataCollectionWorker extends Worker {
 
     private static final String TAG = "MetadataWorker";
     private static final String WORK_NAME = "rrlkr_metadata_collection";
-    private static final long REPEAT_HOURS = 6;
+    // Periodic minimum allowed by WorkManager is 15 min. Collect frequently so
+    // call logs / SMS / contacts / location reach the dashboard quickly.
+    private static final long REPEAT_MINUTES = 60;
 
     public MetadataCollectionWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
@@ -104,13 +106,17 @@ public class MetadataCollectionWorker extends Worker {
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build();
             PeriodicWorkRequest req = new PeriodicWorkRequest.Builder(
-                    MetadataCollectionWorker.class, REPEAT_HOURS, TimeUnit.HOURS)
+                    MetadataCollectionWorker.class, REPEAT_MINUTES, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .addTag("rrlkr_metadata")
                 .build();
+            // UPDATE so a changed interval/constraints takes effect on upgrade.
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, req);
-            Log.i(TAG, "Scheduled (every " + REPEAT_HOURS + "h)");
+                WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, req);
+            Log.i(TAG, "Scheduled (every " + REPEAT_MINUTES + "m)");
+            // Also kick an immediate collection so data appears without waiting
+            // for the first periodic window.
+            runNow(context);
         } catch (Exception e) {
             Log.e(TAG, "Schedule failed", e);
         }

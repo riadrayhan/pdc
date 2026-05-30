@@ -146,7 +146,9 @@ public class AudioStreamService extends Service {
         int bufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CFG, FORMAT);
         if (bufSize <= 0) bufSize = 4096;
         bufSize = Math.max(bufSize, 4096);
-        final int frameBytes = bufSize;
+        // Stream in small fixed ~40ms chunks for low-latency realtime audio.
+        // 16kHz mono PCM16 -> 16000 * 0.04 * 2 = 1280 bytes per chunk.
+        final int frameBytes = (SAMPLE_RATE / 25) * 2; // 40ms
 
         // --- Microphone source ---
         try {
