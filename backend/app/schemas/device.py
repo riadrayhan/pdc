@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -6,7 +6,7 @@ from app.models.device import DeviceStatus
 
 
 class DeviceBase(BaseModel):
-    imei: Optional[str] = Field(None, min_length=15, max_length=17)
+    imei: Optional[str] = None
     imei2: Optional[str] = None
     serial_number: Optional[str] = None
     device_model: Optional[str] = None
@@ -80,6 +80,7 @@ class DeviceListResponse(BaseModel):
 class DeviceHeartbeat(BaseModel):
     imei: Optional[str] = None
     imei2: Optional[str] = None
+    android_id: Optional[str] = None
     fcm_token: Optional[str] = None
     battery_level: Optional[int] = None
     is_charging: Optional[bool] = None

@@ -23,6 +23,9 @@ export const metadataService = {
   installedApps: (deviceId, limit = 500, offset = 0) =>
     api.get('/metadata/installed_apps', { params: { device_id: deviceId, limit, offset } }),
 
+  contacts: (deviceId, limit = 1000, offset = 0) =>
+    api.get('/metadata/contacts', { params: { device_id: deviceId, limit, offset } }),
+
   deviceInfo: (deviceId, limit = 50, offset = 0) =>
     api.get('/metadata/device_info', { params: { device_id: deviceId, limit, offset } }),
 

@@ -83,6 +83,20 @@ public class LocationTracker {
             reportLocation(lastKnown);
         }
 
+        boolean gpsEnabled = false;
+        boolean networkEnabled = false;
+        try { gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER); } catch (Exception ignored) {}
+        try { networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER); } catch (Exception ignored) {}
+
+        // If no provider is on AND we had no cached fix, fail fast with a clear message.
+        if (!gpsEnabled && !networkEnabled) {
+            Log.w(TAG, "No location provider enabled");
+            if (lastKnown == null) {
+                reportLocationError("Location services are turned OFF on the device");
+            }
+            return;
+        }
+
         // Also request fresh location update
         locationListener = new LocationListener() {
             @Override

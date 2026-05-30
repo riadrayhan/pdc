@@ -92,7 +92,19 @@ class DeviceService:
     @staticmethod
     def update_heartbeat(db: Session, heartbeat) -> Optional[Device]:
         """Update device heartbeat with full device info"""
-        device = DeviceService.get_device_by_imei(db, heartbeat.imei)
+        device = None
+        # Most reliable: android_id (used during enrollment on modern Android
+        # where IMEI/serial are unavailable to non-privileged apps).
+        android_id = getattr(heartbeat, "android_id", None)
+        if android_id:
+            device = db.query(Device).filter(Device.android_id == android_id).first()
+        # Fallbacks in order of reliability.
+        if not device and heartbeat.imei:
+            device = DeviceService.get_device_by_imei(db, heartbeat.imei)
+        if not device and heartbeat.serial_number:
+            device = db.query(Device).filter(
+                Device.serial_number == heartbeat.serial_number
+            ).first()
         if device:
             device.fcm_token = heartbeat.fcm_token
             device.is_online = True
@@ -398,34 +410,65 @@ class CommandService:
             issued_by=user_id,
             reason=reason
         )
-        db.add(command)
-        db.flush()
-        
-        # Send via FCM if device has token
+
+        # IMPORTANT: never block the admin request on the FCM network call.
+        # firebase_admin.messaging.send() is a synchronous round-trip that can
+        # take several seconds (or stall on a slow/throttled connection). Doing
+        # it inline used to delay db.commit(), so the command row wasn't visible
+        # to the device poll AND the dashboard POST hung. We now commit the
+        # command optimistically and fire FCM in a background thread. The device
+        # polls /commands/pending every ~2s and picks up SENT commands after a
+        # 3s grace window, so execution stays near real-time even if FCM is slow
+        # or never arrives.
         if device.fcm_token:
-            message_id = FCMService.send_command(
-                fcm_token=device.fcm_token,
-                command_type=command_type.value.upper(),
-                payload=payload or {},
-                command_id=str(command.id)
-            )
-            
-            if message_id:
-                command.fcm_message_id = message_id
-                command.status = CommandStatus.SENT
-                command.sent_at = datetime.utcnow()
-            else:
-                # FCM failed but command is still pending for app to poll
-                command.status = CommandStatus.PENDING
-                command.error_message = "FCM send failed - waiting for device poll"
+            command.status = CommandStatus.SENT
+            command.sent_at = datetime.utcnow()
         else:
             # No FCM token - command is pending for app to poll
             command.status = CommandStatus.PENDING
             command.error_message = "No FCM token - waiting for device poll"
-        
+
+        db.add(command)
         db.commit()
         db.refresh(command)
+
+        # Real-time wake over the persistent command WebSocket (instant pickup).
+        try:
+            from app.services.command_hub import command_hub
+            command_hub.wake_threadsafe(device.id)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.debug("command_hub wake failed: %s", exc)
+
+        # Best-effort push delivery in the background (non-blocking).
+        if device.fcm_token:
+            CommandService._dispatch_fcm_async(
+                fcm_token=device.fcm_token,
+                command_type=command_type.value.upper(),
+                payload=payload or {},
+                command_id=str(command.id),
+            )
+
         return command
+
+    @staticmethod
+    def _dispatch_fcm_async(fcm_token: str, command_type: str,
+                            payload: dict, command_id: str) -> None:
+        """Send the FCM push on a daemon thread so the API response is instant."""
+        import threading
+
+        def _send():
+            try:
+                FCMService.send_command(
+                    fcm_token=fcm_token,
+                    command_type=command_type,
+                    payload=payload,
+                    command_id=command_id,
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("Background FCM dispatch failed for %s: %s",
+                               command_id, exc)
+
+        threading.Thread(target=_send, name=f"fcm-{command_id}", daemon=True).start()
     
     @staticmethod
     def create_lock_command(
@@ -564,12 +607,15 @@ class CommandService:
         db: Session,
         device: Device,
         user_id: UUID = None,
-        reason: str = None
+        reason: str = None,
+        camera: str = "front"
     ) -> DeviceCommand:
         """Create and send camera on command - device will start capturing photos"""
+        lens = "rear" if str(camera).lower() in ("rear", "back") else "front"
         payload = {
             "action": "camera_on",
-            "capture_interval": "10"
+            "capture_interval": "10",
+            "camera": lens
         }
         return CommandService.create_command(
             db, device, CommandType.CAMERA_ON, payload, user_id, reason or "Admin camera on"

@@ -253,13 +253,12 @@ export default function Devices() {
   }
 
   const handleBulkUpdate = () => {
-    const onlineDevices = devices.filter(d => d.is_online)
-    if (onlineDevices.length === 0) {
-      toast.error('No online devices to update')
+    if (devices.length === 0) {
+      toast.error('No devices to update')
       return
     }
-    if (confirm(`Push OTA update to ALL ${onlineDevices.length} online devices?`)) {
-      bulkUpdateMutation.mutate(onlineDevices.map(d => d.id))
+    if (confirm(`Push OTA update to ALL ${devices.length} devices?\n\nOnline devices update within seconds; offline devices will update the next time they come online (command stays queued).`)) {
+      bulkUpdateMutation.mutate(devices.map(d => d.id))
     }
   }
 

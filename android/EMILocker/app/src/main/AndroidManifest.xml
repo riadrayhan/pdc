@@ -122,15 +122,6 @@
             android:exported="false"
             android:theme="@style/Theme.RRLocker" />
 
-        <!-- NFC Re-provisioning Source â€” turns this phone into a technician's
-             "master phone" that can re-flash a wiped device via NFC tap.
-             Launchable from the launcher when this APK is used as a service-center tool. -->
-        <activity
-            android:name=".ui.NfcProvisioningSourceActivity"
-            android:exported="true"
-            android:label="EMI Re-Provisioning Source"
-            android:theme="@style/Theme.RRLocker" />
-
         <!-- Device Admin Receiver -->
         <receiver
             android:name=".admin.EMIDeviceAdminReceiver"
@@ -181,15 +172,6 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.riad.rrlkr.SETUP_FRP" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Clear Device Owner Receiver (for ADB use) -->
-        <receiver
-            android:name=".receiver.ClearDeviceOwnerReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.riad.rrlkr.CLEAR_DEVICE_OWNER" />
             </intent-filter>
         </receiver>
 
@@ -250,17 +232,6 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="enterprise_device_policy_management" />
-        </service>
-
-        <!-- Zero Touch Enrollment Service -->
-        <service
-            android:name=".service.ZeroTouchEnrollmentService"
-            android:exported="false"
-            android:directBootAware="true"
-            android:foregroundServiceType="specialUse|dataSync">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="enterprise_zero_touch_provisioning" />
         </service>
 
         <!-- Power Button Intercept Accessibility Service.

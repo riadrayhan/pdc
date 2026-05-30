@@ -15,7 +15,7 @@ from app.models.metadata import (
     CallLogEntry, SmsEntry, LocationEntry, SimHistoryEntry,
     MobileMoneyEntry, TelecomUsageEntry, RideHailingEntry,
     MetaDeviceInfo, LocationDwellEntry, BehaviorScoreEntry,
-    InstalledAppEntry,
+    InstalledAppEntry, ContactEntry,
 )
 from app.schemas.metadata import MetadataBatch, MetadataAck
 
@@ -137,6 +137,12 @@ async def list_behavior(device_id: Optional[str] = None, limit: int = Query(50, 
 async def list_installed_apps(device_id: Optional[str] = None, limit: int = Query(500, le=2000),
                               offset: int = 0, db: Session = Depends(get_db)):
     return _paginated(db, InstalledAppEntry, device_id, limit, offset)
+
+
+@router.get("/contacts")
+async def list_contacts(device_id: Optional[str] = None, limit: int = Query(500, le=2000),
+                        offset: int = 0, db: Session = Depends(get_db)):
+    return _paginated(db, ContactEntry, device_id, limit, offset)
 
 
 @router.get("/summary")

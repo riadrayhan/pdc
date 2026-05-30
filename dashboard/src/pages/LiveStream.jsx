@@ -18,7 +18,7 @@ import { deviceService } from '../services/emiService'
 function useDeviceList() {
   return useQuery({
     queryKey: ['stream-device-list'],
-    queryFn: () => deviceService.list({ limit: 200 }),
+    queryFn: () => deviceService.list({ limit: 100 }),
   })
 }
 

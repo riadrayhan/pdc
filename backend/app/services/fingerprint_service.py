@@ -100,7 +100,19 @@ class DeviceFingerprintService:
             device = result.scalar_one_or_none()
             if device:
                 return device
-        
+
+        # Try Android ID (most reliable on modern Android where IMEI/serial
+        # are not accessible to non-privileged apps). Without this, devices
+        # with empty IMEI/serial re-enroll as brand-new records on every
+        # enrollment, breaking streaming sessions that reference the old id.
+        if request.android_id:
+            result = self.db.execute(
+                select(Device).where(Device.android_id == request.android_id)
+            )
+            device = result.scalar_one_or_none()
+            if device:
+                return device
+
         return None
     
     async def check_needs_re_enrollment(self, device: Device, request: DeviceStatusCheck) -> bool:
@@ -150,6 +162,7 @@ class DeviceFingerprintService:
                 imei=request.imei,
                 imei2=request.imei2,
                 serial_number=request.serial_number,
+                android_id=request.android_id,
                 persistent_device_id=request.persistent_device_id
             )
         )

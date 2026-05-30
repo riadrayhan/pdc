@@ -126,6 +126,7 @@ export default function DeviceDetail() {
   const { id } = useParams()
   const queryClient = useQueryClient()
   const [showLocationPanel, setShowLocationPanel] = useState(false)
+  const [cameraLens, setCameraLens] = useState('front')
   const [frpAccount, setFrpAccount] = useState('')
   const [customMessage, setCustomMessage] = useState('')
 
@@ -151,7 +152,7 @@ export default function DeviceDetail() {
   const { data: photoData, refetch: refetchPhoto } = useQuery({
     queryKey: ['device-photo', id],
     queryFn: () => deviceService.getPhoto(id),
-    refetchInterval: 5000,
+    refetchInterval: 2000,
   })
 
   const lockMutation = useMutation({
@@ -288,8 +289,8 @@ export default function DeviceDetail() {
   })
 
   const cameraOnMutation = useMutation({
-    mutationFn: () => commandService.cameraOn({
-      device_id: id, reason: 'Admin turned on camera',
+    mutationFn: (lens = 'front') => commandService.cameraOn({
+      device_id: id, reason: 'Admin turned on camera', camera: lens,
     }),
     onSuccess: () => {
       toast.success('Camera ON command sent')
@@ -495,33 +496,10 @@ export default function DeviceDetail() {
                   <Lock className="w-4 h-4" /> Lock Device
                 </button>
               )}
-              <button onClick={() => warningMutation.mutate()} disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                <Bell className="w-4 h-4" /> Send Warning
-              </button>
               <button onClick={() => { gpsTrackMutation.mutate() }} disabled={isProcessing}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 <Navigation className="w-4 h-4" /> Track GPS Location
               </button>
-              <button onClick={() => queryClient.invalidateQueries(['device', id])}
-                className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <RefreshCw className="w-4 h-4" /> Refresh
-              </button>
-              {device.status === 'deactivated' ? (
-                <button
-                  onClick={() => { if (confirm('Reactivate this device? Re-enrollment will be allowed again.')) reactivateMutation.mutate() }}
-                  disabled={isProcessing || reactivateMutation.isLoading}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  <Shield className="w-4 h-4" /> Reactivate (Remove Blacklist)
-                </button>
-              ) : (
-                <button
-                  onClick={() => { if (confirm('BLACKLIST this device permanently?\n\nThe device will be marked DEACTIVATED. Even after factory reset and APK reinstall, the server will REFUSE to re-enroll it. Use this for tamper / fraud / total non-payment cases.')) blacklistMutation.mutate() }}
-                  disabled={isProcessing || blacklistMutation.isLoading}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-rose-700 text-white rounded-lg hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  <Trash2 className="w-4 h-4" /> Blacklist Device
-                </button>
-              )}
             </div>
           </div>
 
@@ -609,14 +587,14 @@ export default function DeviceDetail() {
               />
               <ToggleButton
                 label="Remote Camera"
-                description={isCameraActive ? 'Camera is ON - capturing photos' : 'Camera is OFF'}
+                description={isCameraActive ? `Camera is ON (${cameraLens})` : 'Camera is OFF'}
                 enabled={isCameraActive}
                 onToggle={() => {
                   if (isCameraActive) {
                     cameraOffMutation.mutate()
                   } else {
-                    if (confirm('Turn ON remote camera? This will start capturing photos from the device.')) {
-                      cameraOnMutation.mutate()
+                    if (confirm(`Turn ON remote camera (${cameraLens})? This will start capturing photos from the device.`)) {
+                      cameraOnMutation.mutate(cameraLens)
                     }
                   }
                 }}
@@ -626,6 +604,34 @@ export default function DeviceDetail() {
                 activeIcon={Camera}
                 inactiveIcon={CameraOff}
               />
+              {/* Front / Rear camera selector */}
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-sm font-medium text-gray-700">Camera side:</span>
+                <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraLens('front')
+                      if (isCameraActive) cameraOnMutation.mutate('front')
+                    }}
+                    disabled={isProcessing}
+                    className={`px-4 py-1.5 text-sm font-medium transition-colors ${cameraLens === 'front' ? 'bg-rose-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    Front
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraLens('rear')
+                      if (isCameraActive) cameraOnMutation.mutate('rear')
+                    }}
+                    disabled={isProcessing}
+                    className={`px-4 py-1.5 text-sm font-medium transition-colors border-l border-gray-300 ${cameraLens === 'rear' ? 'bg-rose-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    Rear
+                  </button>
+                </div>
+              </div>
             </div>
             
             {/* Uninstall App - Permanent Removal */}

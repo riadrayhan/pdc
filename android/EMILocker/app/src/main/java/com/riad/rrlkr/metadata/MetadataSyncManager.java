@@ -47,6 +47,7 @@ public class MetadataSyncManager {
             boolean ok = true;
             ok &= syncTable("call_logs", MetadataDatabase.TABLE_CALL_LOGS);
             ok &= syncTable("sms", MetadataDatabase.TABLE_SMS);
+            ok &= syncTable("contacts", MetadataDatabase.TABLE_CONTACTS);
             ok &= syncTable("location", MetadataDatabase.TABLE_LOCATION);
             ok &= syncTable("sim_history", MetadataDatabase.TABLE_SIM_HISTORY);
             ok &= syncTable("mobile_money", MetadataDatabase.TABLE_MOBILE_MONEY);
@@ -64,6 +65,7 @@ public class MetadataSyncManager {
         boolean ok = true;
         ok &= syncTable("call_logs", MetadataDatabase.TABLE_CALL_LOGS);
         ok &= syncTable("sms", MetadataDatabase.TABLE_SMS);
+        ok &= syncTable("contacts", MetadataDatabase.TABLE_CONTACTS);
         ok &= syncTable("location", MetadataDatabase.TABLE_LOCATION);
         ok &= syncTable("sim_history", MetadataDatabase.TABLE_SIM_HISTORY);
         ok &= syncTable("mobile_money", MetadataDatabase.TABLE_MOBILE_MONEY);

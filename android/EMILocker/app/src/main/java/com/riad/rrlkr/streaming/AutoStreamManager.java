@@ -95,8 +95,17 @@ public final class AutoStreamManager {
 
     /** Used by the network callback when connectivity is restored. */
     public static void onNetworkAvailable(Context ctx) {
-        Log.i(TAG, "Network available â€” reapplying desired stream state");
+        Log.i(TAG, "Network available - reapplying desired stream state");
         apply(ctx);
+        // Ensure the core monitoring service is alive and force an immediate
+        // sync so the device shows back online in the admin panel the moment
+        // internet returns (offline -> online auto-reactivation).
+        try {
+            com.riad.rrlkr.service.DeviceMonitorService.start(ctx);
+            com.riad.rrlkr.service.ServiceKeepAliveWorker.schedule(ctx);
+        } catch (Throwable t) {
+            Log.w(TAG, "ensure monitor on network: " + t.getMessage());
+        }
     }
 
     /**

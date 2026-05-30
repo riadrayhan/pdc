@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List, Optional
@@ -205,7 +205,7 @@ async def camera_on(
         )
     
     command = CommandService.create_camera_on_command(
-        db, device, None, camera_data.reason
+        db, device, None, camera_data.reason, camera_data.camera
     )
     
     # Update device camera_active flag
@@ -365,22 +365,50 @@ async def get_pending_commands(
     device_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get pending commands for a device (called by Android app polling).
-    Returns PENDING commands and SENT commands older than 60s (FCM delivery likely failed)."""
-    from datetime import datetime, timedelta
-    cutoff = datetime.utcnow() - timedelta(seconds=60)
+    """Get pending commands for a device (called by the Android app).
+
+    Returns every PENDING and SENT command immediately. Real-time delivery is
+    driven by the persistent command WebSocket (the server pushes a wake the
+    instant a command is created) with the ~2s poll + FCM as fallbacks. The app
+    de-duplicates by command id and acks each command once executed, flipping it
+    away from SENT so it is never returned (or run) twice. There is therefore no
+    artificial grace delay — commands are handed out the moment they exist for
+    near-instant execution."""
     commands = db.query(DeviceCommand).filter(
         DeviceCommand.device_id == device_id,
-        or_(
-            DeviceCommand.status == CommandStatus.PENDING,
-            and_(
-                DeviceCommand.status == CommandStatus.SENT,
-                DeviceCommand.created_at < cutoff
-            )
-        )
+        DeviceCommand.status.in_([CommandStatus.PENDING, CommandStatus.SENT])
     ).order_by(DeviceCommand.created_at.asc()).all()
-    
+
     return commands
+
+
+@router.websocket("/ws/{device_id}")
+async def command_socket(ws: WebSocket, device_id: str):
+    """Persistent real-time command channel for the Android app.
+
+    The device connects once and keeps the socket open. When the admin issues a
+    command the backend pushes ``{"event":"command"}`` here, prompting the app to
+    immediately fetch /commands/pending and execute — eliminating poll latency.
+    The 2s poll + FCM remain as fallbacks if the socket is down.
+    """
+    from app.services.command_hub import command_hub
+
+    await ws.accept()
+    await command_hub.attach(device_id, ws)
+    try:
+        await ws.send_text('{"event":"connected"}')
+        while True:
+            # We don't expect inbound messages; receiving detects disconnects
+            # and consumes client pings/acks without busy-looping.
+            await ws.receive()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:  # pragma: no cover - best effort
+        import logging
+        logging.getLogger(__name__).warning(
+            "command_socket error device=%s: %s", device_id, e)
+    finally:
+        await command_hub.detach(device_id, ws)
 
 
 @router.delete("/history/{device_id}", status_code=204)

@@ -13,7 +13,6 @@ import android.widget.Toast;
 import com.riad.rrlkr.service.DeviceMonitorService;
 import com.riad.rrlkr.service.DeviceProtectionManager;
 import com.riad.rrlkr.service.SamsungProtectionManager;
-import com.riad.rrlkr.service.ZeroTouchEnrollmentService;
 import com.riad.rrlkr.util.PreferenceManager;
 import com.riad.rrlkr.BuildConfig;
 
@@ -76,7 +75,7 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
             // Start monitoring service
             DeviceMonitorService.start(context);
             
-            // Auto-apply protections if Device Owner â€” but DELAYED
+            // Auto-apply protections if Device Owner Ã¢â‚¬â€ but DELAYED
             // applyAllProtections() disables USB data which kills ADB connection
             // Delay 30 seconds so provisioning + enrollment can complete first
             DevicePolicyManager dpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -89,7 +88,7 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
                 }, 30000);
             }
         } else {
-            Log.i(TAG, "ZTE provisioning active â€” skipping protections & monitor service start");
+            Log.i(TAG, "ZTE provisioning active Ã¢â‚¬â€ skipping protections & monitor service start");
         }
     }
     
@@ -142,137 +141,9 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
      */
     @Override
     public void onProfileProvisioningComplete(Context context, Intent intent) {
+        // Device Owner provisioning has been removed. Protection is enforced
+        // through Device Admin, which the user grants in-app.
         super.onProfileProvisioningComplete(context, intent);
-        Log.i(TAG, "=== PROVISIONING COMPLETE - Device Owner Activated! ===");
-        Log.i(TAG, "Device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
-        Log.i(TAG, "Android: " + android.os.Build.VERSION.RELEASE + " (SDK " + android.os.Build.VERSION.SDK_INT + ")");
-        
-        DevicePolicyManager dpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-        ComponentName admin = getComponentName(context);
-        
-        if (dpm == null || !dpm.isDeviceOwnerApp(context.getPackageName())) {
-            Log.e(TAG, "Provisioning complete but NOT Device Owner â€” aborting");
-            return;
-        }
-        
-        Log.i(TAG, "Device Owner confirmed via provisioning");
-        
-        // Detect Samsung device
-        boolean isSamsung = android.os.Build.MANUFACTURER.toLowerCase().contains("samsung");
-        if (isSamsung) {
-            Log.i(TAG, "=== Samsung device detected â€” using Samsung QR provisioning mode ===");
-        }
-        
-        // Save admin status immediately
-        PreferenceManager prefs = new PreferenceManager(context);
-        prefs.setDeviceAdminEnabled(true);
-        
-        // Mark that ZTE provisioning is in progress â€” device must NOT auto-lock
-        prefs.saveBoolean("zte_provisioning_active", true);
-        prefs.saveBoolean("admin_lock_command", false);
-        prefs.setDeviceLocked(false);
-        
-        // ======= IMMEDIATE SECURITY HARDENING =======
-        // Apply critical restrictions BEFORE anything else to prevent tampering
-        applyImmediateRestrictions(context, dpm, admin);
-        
-        // Block uninstall of our app
-        try {
-            dpm.setUninstallBlocked(admin, context.getPackageName(), true);
-            Log.i(TAG, "App uninstall blocked");
-        } catch (Exception e) {
-            Log.w(TAG, "Could not block uninstall: " + e.getMessage());
-        }
-        
-        // Grant critical permissions silently (including Android 13+ and 14+)
-        grantCriticalPermissions(context, dpm, admin);
-        
-        // Setup Factory Reset Protection (FRP)
-        try {
-            // Seed the default FRP Google account from BuildConfig if not already set.
-            // This guarantees that even if the admin never sends a "set-frp-account" command,
-            // the device is still locked to OUR account post-reset.
-            String existingFrp = prefs.getFRPAccount();
-            if (existingFrp == null || existingFrp.isEmpty()) {
-                prefs.setFRPAccount(BuildConfig.DEFAULT_FRP_ACCOUNT);
-                Log.i(TAG, "FRP account seeded from BuildConfig: " + BuildConfig.DEFAULT_FRP_ACCOUNT);
-            }
-            com.riad.rrlkr.receiver.FactoryResetProtectionReceiver.setupFactoryResetProtection(context);
-            Log.i(TAG, "FRP configured");
-        } catch (Exception e) {
-            Log.w(TAG, "FRP setup warning: " + e.getMessage());
-        }
-        
-        // ======= SAMSUNG KNOX INITIALIZATION =======
-        if (isSamsung) {
-            try {
-                SamsungProtectionManager samsungManager = new SamsungProtectionManager(context);
-                samsungManager.initKnoxLicense();
-                Log.i(TAG, "Samsung Knox initialized during provisioning");
-            } catch (Exception e) {
-                Log.w(TAG, "Samsung Knox init warning: " + e.getMessage());
-            }
-        }
-        
-        // ======= ZERO TOUCH ENROLLMENT v2.0 =======
-        PersistableBundle adminExtras = null;
-        
-        if (intent != null) {
-            adminExtras = intent.getParcelableExtra(
-                    DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE);
-        }
-        
-        boolean autoEnroll = true; // Default to auto-enroll (Samsung QR has no admin extras)
-        String serverUrl = BuildConfig.SERVER_URL; // Default server URL from build config
-        
-        if (adminExtras != null) {
-            // auto_enroll may come as boolean or string "true" depending on QR parser
-            autoEnroll = adminExtras.getBoolean("auto_enroll", true);
-            if (!autoEnroll) {
-                String autoEnrollStr = adminExtras.getString("auto_enroll");
-                autoEnroll = "true".equalsIgnoreCase(autoEnrollStr);
-            }
-            String extrasServerUrl = adminExtras.getString("server_url");
-            if (extrasServerUrl != null && !extrasServerUrl.isEmpty()) {
-                serverUrl = extrasServerUrl;
-            }
-            String zteVersion = adminExtras.getString("zte_version", "2.0");
-            
-            Log.i(TAG, "=== ZTE Admin Extras Found (v2.0) ===");
-            Log.i(TAG, "  server_url: " + serverUrl);
-            Log.i(TAG, "  auto_enroll: " + autoEnroll);
-            Log.i(TAG, "  zte_version: " + zteVersion);
-            
-            prefs.saveBoolean("zte_provisioned", true);
-            prefs.saveString("zte_version", zteVersion);
-        } else {
-            // Samsung QR provisioning: no admin extras (removed for Samsung compatibility)
-            // Also handles Android 13+ which may strip admin extras
-            // Auto-enroll using default server URL from BuildConfig
-            Log.i(TAG, "=== No admin extras â€” Samsung/Android 13+ QR mode ===");
-            Log.i(TAG, "  Auto-enrolling with BuildConfig.SERVER_URL: " + serverUrl);
-            prefs.saveBoolean("zte_provisioned", true);
-            prefs.saveString("zte_version", "2.0");
-            prefs.saveString("provisioning_mode", isSamsung ? "samsung_qr" : "standard_qr");
-        }
-        
-        // Always save server URL
-        prefs.setServerUrl(serverUrl);
-        
-        // Always auto-enroll â€” whether admin extras present or not
-        Log.i(TAG, "=== STARTING ZERO TOUCH AUTO-ENROLLMENT v2.0 ===");
-        Log.i(TAG, "Device will enroll automatically to: " + serverUrl);
-        
-        android.widget.Toast.makeText(context, 
-                "RR Device Manager: Auto-setup in progress...", 
-                android.widget.Toast.LENGTH_LONG).show();
-        
-        // Start ZTE Service v2.0
-        if (adminExtras != null) {
-            ZeroTouchEnrollmentService.start(context, adminExtras);
-        } else {
-            ZeroTouchEnrollmentService.start(context, serverUrl);
-        }
     }
     
     /**
@@ -303,7 +174,7 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
             Log.i(TAG, "  Restriction: DISALLOW_SAFE_BOOT");
             
             // Block USB file transfer (API 30+)
-            // NOTE: USB file transfer restriction is safe here â€” it doesn't kill ADB
+            // NOTE: USB file transfer restriction is safe here Ã¢â‚¬â€ it doesn't kill ADB
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 dpm.addUserRestriction(admin, android.os.UserManager.DISALLOW_USB_FILE_TRANSFER);
                 Log.i(TAG, "  Restriction: DISALLOW_USB_FILE_TRANSFER");
@@ -315,7 +186,7 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
 
             // === RECOVERY MODE / BOOTLOADER HARDENING (CRITICAL) ===
             // Without these, anyone with hardware key combo + tools can wipe the device.
-            // Block OEM unlock â€” bootloader cannot be unlocked => custom recovery impossible
+            // Block OEM unlock Ã¢â‚¬â€ bootloader cannot be unlocked => custom recovery impossible
             try {
                 dpm.setGlobalSetting(admin, "oem_unlock_enabled", "0");
                 Log.i(TAG, "  Hardening: OEM unlock DISABLED (bootloader locked forever)");
@@ -352,10 +223,10 @@ public class EMIDeviceAdminReceiver extends DeviceAdminReceiver {
             }
 
             // NOTE: Do NOT disable ADB, USB data signaling, or debugging features here!
-            // This runs during provisioning â€” killing USB/ADB here crashes the setup process.
+            // This runs during provisioning Ã¢â‚¬â€ killing USB/ADB here crashes the setup process.
             // These are handled later by applyAllProtections() after enrollment completes.
             
-            // CRITICAL: Android 13+ â€” Permit all accessibility services immediately
+            // CRITICAL: Android 13+ Ã¢â‚¬â€ Permit all accessibility services immediately
             // Without this, Android 13+ "Restricted Settings" blocks our accessibility service
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 try {

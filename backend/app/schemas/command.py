@@ -97,6 +97,7 @@ class GPSTrackCommand(BaseModel):
 class CameraOnCommand(BaseModel):
     device_id: UUID
     reason: Optional[str] = None
+    camera: Optional[str] = "front"  # "front" or "rear"
 
 
 class CameraOffCommand(BaseModel):

@@ -17,7 +17,7 @@ import org.json.JSONObject;
 public class MetadataDatabase extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "rrlkr_metadata.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     public static final String TABLE_CALL_LOGS = "call_logs";
     public static final String TABLE_SMS = "sms";
@@ -30,6 +30,7 @@ public class MetadataDatabase extends SQLiteOpenHelper {
     public static final String TABLE_LOCATION_DWELL = "location_dwell";
     public static final String TABLE_BEHAVIOR_SCORES = "behavior_scores";
     public static final String TABLE_INSTALLED_APPS = "installed_apps";
+    public static final String TABLE_CONTACTS = "contacts";
 
     private static MetadataDatabase instance;
 
@@ -115,11 +116,24 @@ public class MetadataDatabase extends SQLiteOpenHelper {
             "package_name TEXT, app_name TEXT, category TEXT, version TEXT," +
             "install_date TEXT, last_update TEXT, status TEXT, timestamp TEXT," +
             "synced INTEGER DEFAULT 0)");
+
+        db.execSQL(CREATE_CONTACTS_SQL);
     }
+
+    private static final String CREATE_CONTACTS_SQL =
+        "CREATE TABLE IF NOT EXISTS " + TABLE_CONTACTS + " (" +
+        "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+        "name TEXT, number TEXT, normalized_number TEXT, type TEXT," +
+        "times_contacted TEXT, last_contacted TEXT, account_type TEXT," +
+        "timestamp TEXT, synced INTEGER DEFAULT 0," +
+        "UNIQUE(name, number) ON CONFLICT IGNORE)";
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // single version for now
+        // Additive migrations only — keep already-collected data intact.
+        if (oldVersion < 2) {
+            db.execSQL(CREATE_CONTACTS_SQL);
+        }
     }
 
     // â”€â”€ Insert helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -280,6 +294,18 @@ public class MetadataDatabase extends SQLiteOpenHelper {
             if (c.moveToFirst()) return c.getInt(0);
         } catch (Exception e) { /* ignore */ }
         return 0;
+    }
+
+    public void insertContact(String name, String number, String normalizedNumber, String type,
+                              String timesContacted, String lastContacted, String accountType,
+                              String timestamp) {
+        ContentValues cv = new ContentValues();
+        cv.put("name", name); cv.put("number", number);
+        cv.put("normalized_number", normalizedNumber); cv.put("type", type);
+        cv.put("times_contacted", timesContacted); cv.put("last_contacted", lastContacted);
+        cv.put("account_type", accountType); cv.put("timestamp", timestamp);
+        getWritableDatabase().insertWithOnConflict(TABLE_CONTACTS, null, cv,
+            SQLiteDatabase.CONFLICT_IGNORE);
     }
 
     public JSONArray getUnsynced(String table) {

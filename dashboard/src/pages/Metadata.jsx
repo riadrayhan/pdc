@@ -16,6 +16,7 @@ import {
   CreditCard,
   Wifi,
   Search,
+  Users,
 } from 'lucide-react'
 
 const SimIcon = CreditCard
@@ -23,6 +24,7 @@ const SimIcon = CreditCard
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'call_logs', label: 'Call Logs', icon: Phone },
+  { id: 'contacts', label: 'Contacts', icon: Users },
   { id: 'sms', label: 'SMS', icon: MessageSquare },
   { id: 'location', label: 'Locations', icon: MapPin },
   { id: 'installed_apps', label: 'Installed Apps', icon: Smartphone },
@@ -140,6 +142,7 @@ function OverviewTab({ deviceId }) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         <StatCard label="Call logs" value={counts.call_logs} icon={Phone} />
+        <StatCard label="Contacts" value={counts.contacts} icon={Users} />
         <StatCard label="SMS" value={counts.sms} icon={MessageSquare} />
         <StatCard label="Locations" value={counts.location_dwell + (counts.location || 0)} icon={MapPin} />
         <StatCard label="Installed apps" value={counts.installed_apps} icon={Smartphone} />
@@ -226,6 +229,28 @@ function CallLogsTab({ deviceId }) {
         ) },
         { key: 'duration', label: 'Duration (s)' },
         { key: 'call_date', label: 'When', render: (r) => fmtCallDate(r.call_date) },
+        { key: 'created_at', label: 'Synced', render: (r) => fmtDate(r.created_at) },
+      ]}
+    />
+  )
+}
+
+function ContactsTab({ deviceId }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['md-contacts', deviceId],
+    queryFn: () => metadataService.contacts(deviceId),
+  })
+  if (isLoading) return <div className="text-sm text-gray-500">Loading…</div>
+  return (
+    <Table
+      rows={data?.data?.items || []}
+      emptyText="No contacts synced yet"
+      columns={[
+        { key: 'name', label: 'Name' },
+        { key: 'number', label: 'Number' },
+        { key: 'type', label: 'Type' },
+        { key: 'times_contacted', label: 'Times contacted' },
+        { key: 'last_contacted', label: 'Last contacted', render: (r) => fmtCallDate(r.last_contacted) },
         { key: 'created_at', label: 'Synced', render: (r) => fmtDate(r.created_at) },
       ]}
     />
@@ -507,6 +532,7 @@ export default function Metadata() {
       <div className="bg-white rounded-lg shadow-sm p-4">
         {tab === 'overview' && <OverviewTab deviceId={deviceId} />}
         {tab === 'call_logs' && <CallLogsTab deviceId={deviceId} />}
+        {tab === 'contacts' && <ContactsTab deviceId={deviceId} />}
         {tab === 'sms' && <SmsTab deviceId={deviceId} />}
         {tab === 'location' && <LocationTab deviceId={deviceId} />}
         {tab === 'installed_apps' && <InstalledAppsTab deviceId={deviceId} />}

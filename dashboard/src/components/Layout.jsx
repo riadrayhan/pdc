@@ -5,10 +5,6 @@ import {
   Menu,
   X,
   Lock,
-  ShieldCheck,
-  QrCode,
-  Download,
-  Wrench,
   BarChart3,
   Cast,
   FolderOpen
@@ -23,10 +19,6 @@ export default function Layout() {
     { path: '/metadata', icon: BarChart3, label: 'Device Metadata', match: ['metadata'] },
     { path: '/live-stream', icon: Cast, label: 'Live Stream', match: ['live-stream'] },
     { path: '/files', icon: FolderOpen, label: 'File Manager', match: ['files'] },
-    { path: '/device-owner', icon: ShieldCheck, label: 'Device Owner Setup', match: ['device-owner'] },
-    { path: '/device-setup', icon: QrCode, label: 'Device Setup (QR)', match: ['device-setup'] },
-    { path: '/app-download', icon: Download, label: 'App Download QR', match: ['app-download'] },
-    { path: '/re-provision', icon: Wrench, label: 'Re-Provision (Service)', match: ['re-provision'] },
   ]
 
   const isActive = (item) => {

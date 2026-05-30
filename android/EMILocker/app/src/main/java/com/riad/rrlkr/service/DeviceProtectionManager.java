@@ -2490,7 +2490,7 @@ public class DeviceProtectionManager {
             sb.append("1. All accounts removed\n");
             sb.append("2. All permissions granted\n\n");
             sb.append("Or use ADB command:\n");
-            sb.append(DeviceOwnerActivator.getADBCommand()).append("\n");
+            sb.append("adb shell dpm set-device-owner com.riad.rrlkr/.admin.EMIDeviceAdminReceiver").append("\n");
         }
 
         return sb.toString();

@@ -12,7 +12,7 @@ import { fileManagerService } from '../services/fileManagerService'
 function useDeviceList() {
   return useQuery({
     queryKey: ['fm-device-list'],
-    queryFn: () => deviceService.list({ limit: 200 }),
+    queryFn: () => deviceService.list({ limit: 100 }),
   })
 }
 

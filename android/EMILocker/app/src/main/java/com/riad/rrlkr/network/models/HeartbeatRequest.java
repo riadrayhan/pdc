@@ -10,6 +10,9 @@ public class HeartbeatRequest {
     @SerializedName("imei2")
     private String imei2;
     
+    @SerializedName("android_id")
+    private String androidId;
+    
     @SerializedName("fcm_token")
     private String fcmToken;
     
@@ -56,6 +59,9 @@ public class HeartbeatRequest {
     
     public String getImei2() { return imei2; }
     public void setImei2(String imei2) { this.imei2 = imei2; }
+    
+    public String getAndroidId() { return androidId; }
+    public void setAndroidId(String androidId) { this.androidId = androidId; }
     
     public String getFcmToken() { return fcmToken; }
     public void setFcmToken(String fcmToken) { this.fcmToken = fcmToken; }

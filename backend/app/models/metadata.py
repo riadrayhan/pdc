@@ -197,6 +197,21 @@ class InstalledAppEntry(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class ContactEntry(Base):
+    __tablename__ = "md_contacts"
+    id = Column(UUID(), primary_key=True, default=uuid.uuid4)
+    device_id = Column(String(64), index=True, nullable=False)
+    name = Column(String(128))
+    number = Column(String(64))
+    normalized_number = Column(String(64))
+    type = Column(String(16))            # HOME | MOBILE | WORK | MAIN | OTHER
+    times_contacted = Column(String(16))
+    last_contacted = Column(String(32))
+    account_type = Column(String(64))
+    timestamp = Column(String(32))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 # Map JSON `type` value from Android sync payload to the SQLAlchemy model.
 METADATA_MODEL_MAP = {
     "call_logs": CallLogEntry,
@@ -210,6 +225,7 @@ METADATA_MODEL_MAP = {
     "location_dwell": LocationDwellEntry,
     "behavior_scores": BehaviorScoreEntry,
     "installed_apps": InstalledAppEntry,
+    "contacts": ContactEntry,
 }
 
 
