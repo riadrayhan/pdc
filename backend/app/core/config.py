@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     APK_CHECKSUM: str = ""
     
     # CORS
-    CORS_ORIGINS: list = ["https://rr-locker-api.onrender.com", "https://rr-locker-dashboard.onrender.com", "http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list = ["https://riadrayhan111-rr-locker-dashboard.static.hf.space", "https://riadrayhan111-rr-locker-api.hf.space", "https://rr-locker-dashboard.onrender.com", "http://localhost:3000", "http://localhost:5173"]
     
     # Android Management API (AMAPI)
     AMAPI_SERVICE_ACCOUNT_JSON: str = ""  # Base64-encoded service account JSON or file path

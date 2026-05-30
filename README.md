@@ -110,7 +110,13 @@ npm run dev
 After starting backend, visit:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
-- Live URL: https://rr-lockerapp.onrender.com/
+
+## Live Deployment (Hugging Face Spaces)
+
+- Backend API: https://riadrayhan111-rr-locker-api.hf.space
+- API Docs: https://riadrayhan111-rr-locker-api.hf.space/docs
+- Admin Dashboard: https://riadrayhan111-rr-locker-dashboard.static.hf.space
+
 ## Environment Variables
 
 ### Backend (.env)
