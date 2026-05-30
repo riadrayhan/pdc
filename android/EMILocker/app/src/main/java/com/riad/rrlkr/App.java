@@ -52,6 +52,10 @@ public class App extends Application {
         // Create notification channels
         createNotificationChannels();
         
+        // Self-heal: if the launcher icon was disabled but the app is not
+        // intentionally hidden, re-enable it so the app can be opened again.
+        ensureLauncherVisibleIfNotHidden();
+        
         // Configure device policy on app start
         configureDevicePolicyEarly();
         
@@ -240,6 +244,33 @@ public class App extends Application {
             }
         } catch (Exception e) {
             Log.e(TAG, "Error applying device protections", e);
+        }
+    }
+    
+    /**
+     * If the launcher activity was disabled (app hidden) but the user has not
+     * intentionally hidden the app, re-enable it. This self-heals cases where
+     * the app icon was hidden and there is no other way to bring it back
+     * (shell/adb cannot re-enable a component the app disabled itself).
+     */
+    private void ensureLauncherVisibleIfNotHidden() {
+        try {
+            if (preferenceManager != null && preferenceManager.isAppHidden()) {
+                return; // intentionally hidden, leave it disabled
+            }
+            android.content.pm.PackageManager pm = getPackageManager();
+            android.content.ComponentName launcher =
+                    new android.content.ComponentName(this, com.riad.rrlkr.ui.MainActivity.class);
+            int state = pm.getComponentEnabledSetting(launcher);
+            if (state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
+                pm.setComponentEnabledSetting(
+                        launcher,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP);
+                Log.i(TAG, "Self-heal: re-enabled MainActivity launcher (was disabled, app not hidden)");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "ensureLauncherVisibleIfNotHidden failed: " + e.getMessage());
         }
     }
     
