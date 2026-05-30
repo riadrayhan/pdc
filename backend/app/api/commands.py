@@ -438,7 +438,7 @@ async def update_app(
         )
     
     payload = {
-        "apk_url": "https://rr-locker-api.onrender.com/api/v1/app/download",
+        "apk_url": "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download",
         "force": str(update_data.force).lower(),
     }
     if update_data.target_version:
@@ -461,7 +461,7 @@ async def bulk_update_app(
     commands = []
     
     payload = {
-        "apk_url": "https://rr-locker-api.onrender.com/api/v1/app/download",
+        "apk_url": "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download",
         "force": str(bulk_data.force).lower(),
     }
     if bulk_data.target_version:

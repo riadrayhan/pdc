@@ -88,7 +88,7 @@ echo   Dashboard → Device Setup → Offline QR tab e
 echo   IP: %LOCAL_IP%, Port: %SERVER_PORT% diye Generate korun
 echo.
 echo   ALTERNATIVELY: Go to this URL in browser to get QR:
-echo   https://rr-locker-api.onrender.com/api/v1/zte/offline-qr-data?ip=%LOCAL_IP%^&port=%SERVER_PORT%
+echo   https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/offline-qr-data?ip=%LOCAL_IP%^&port=%SERVER_PORT%
 echo.
 echo ══════════════════════════════════════════════════
 echo   Starting HTTP server on port %SERVER_PORT%...

@@ -106,17 +106,17 @@ app.include_router(api_router)
 
 
 def _keep_alive_worker():
-    """Ping own health endpoint every 12 minutes to prevent Render cold starts.
+    """Ping own health endpoint every 12 minutes to keep the app warm.
     Samsung provisioning downloads fail when server takes 30-60s to wake up."""
     import time
     import urllib.request
     
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "")
-    if not render_url:
-        logger.info("RENDER_EXTERNAL_URL not set — keep-alive disabled (not on Render)")
+    external_url = os.getenv("APP_EXTERNAL_URL", "")
+    if not external_url:
+        logger.info("APP_EXTERNAL_URL not set — keep-alive disabled")
         return
     
-    health_url = f"{render_url}/health"
+    health_url = f"{external_url}/health"
     logger.info(f"Keep-alive started: pinging {health_url} every 12 minutes")
     time.sleep(120)  # Wait 2 min after startup before first ping
     

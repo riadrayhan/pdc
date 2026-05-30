@@ -43,9 +43,9 @@ APK_FILENAME = "app-release.apk"
 # APK hosting ï¿½ Samsung provisioning REQUIRES direct APK serving with HEAD support
 # All APK downloads go through backend's own endpoints
 # Always use backend's own /zte/apk endpoint for provisioning QR codes
-APK_PROVISIONING_URL = "https://rr-locker-api.onrender.com/api/v1/zte/apk"
+APK_PROVISIONING_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/apk"
 
-APK_MANUAL_DOWNLOAD_URL = "https://rr-locker-api.onrender.com/api/v1/app/download"
+APK_MANUAL_DOWNLOAD_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download"
 # Checksum is computed dynamically from the actual APK file
 _cached_checksum = None
 _cached_checksum_mtime = None

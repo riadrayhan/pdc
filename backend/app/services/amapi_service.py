@@ -39,7 +39,7 @@ CLOUD_DPC_DOWNLOAD = "https://play.google.com/managed/downloadManagingApp?identi
 EMI_LOCKER_PACKAGE = "com.riad.rrlkr"
 
 # APK hosting URL for force-install
-APK_INSTALL_URL = "https://rr-locker-api.onrender.com/api/v1/zte/apk"
+APK_INSTALL_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/apk"
 
 
 def _get_credentials():

@@ -12,7 +12,7 @@ import okhttp3.ResponseBody;
 
 /**
  * OkHttp interceptor that detects Cloudflare challenge responses (typical on
- * *.onrender.com free tier) and transparently solves them via WebView, then
+ * cloud hosting free tier) and transparently solves them via WebView, then
  * retries the original request with the harvested cf_clearance cookie.
  */
 public class CloudflareInterceptor implements Interceptor {

@@ -6,12 +6,12 @@ from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/androidmanagement"]
 PROJECT_ID = "blooger-project"
-CALLBACK_URL = "https://rr-locker-api.onrender.com/api/v1/amapi/callback"
+CALLBACK_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/amapi/callback"
 SERVICE_ACCOUNT_FILE = "service-account.json"
 
 # EMI Locker config
 EMI_LOCKER_PACKAGE = "com.riad.rrlkr"
-APK_URL = "https://rr-locker-api.onrender.com/api/v1/zte/apk"
+APK_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/apk"
 
 def get_service():
     creds = service_account.Credentials.from_service_account_file(
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         print("SETUP COMPLETE!")
         print("=" * 60)
         print(f"\nEnterprise: {enterprise_name}")
-        print(f"\nSet these env vars on Render:")
+        print(f"\nSet these env vars on your host:")
         print(f"  AMAPI_ENTERPRISE_NAME = {enterprise_name}")
         print(f"  AMAPI_PROJECT_ID = {PROJECT_ID}")
         print(f"\nQR string is ready for scanning!")

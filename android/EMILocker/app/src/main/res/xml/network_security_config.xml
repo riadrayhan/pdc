@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Production: HTTPS only for Render API -->
+    <!-- Production: HTTPS only for API -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
     
-    <!-- Allow Render domain (HTTPS) -->
+    <!-- Allow API domain (HTTPS) -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">rr-locker-api.onrender.com</domain>
+        <domain includeSubdomains="true">riadrayhan111-rr-locker-api.hf.space</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

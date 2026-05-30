@@ -71,7 +71,7 @@ public class EnrollmentConfig {
         "        \"com.riad.rrlkr/com.riad.rrlkr.admin.EMIDeviceAdminReceiver\",\n" +
         "    \n" +
         "    \"android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION\": \n" +
-        "        \"https://rr-locker-api.onrender.com/api/v1/zte/apk\",\n" +
+        "        \"https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/apk\",\n" +
         "    \n" +
         "    \"android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM\": \n" +
         "        \"nyEi8RTwqxNUMWmBjDp0LXJ1CxXk2Ya0ABoo_UCpkEk\",\n" +
@@ -106,7 +106,7 @@ public class EnrollmentConfig {
         "{\n" +
         "    \"mdm\": {\n" +
         "        \"packageName\": \"com.riad.rrlkr\",\n" +
-        "        \"downloadUrl\": \"https://rr-locker-api.onrender.com/api/v1/zte/apk\",\n" +
+        "        \"downloadUrl\": \"https://riadrayhan111-rr-locker-api.hf.space/api/v1/zte/apk\",\n" +
         "        \"deviceAdminComponentName\": \"com.riad.rrlkr/com.riad.rrlkr.admin.EMIDeviceAdminReceiver\",\n" +
         "        \"signature\": \"nyEi8RTwqxNUMWmBjDp0LXJ1CxXk2Ya0ABoo_UCpkEk\"\n" +
         "    },\n" +

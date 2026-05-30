@@ -20,8 +20,8 @@ APK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 APK_FILENAME = "app-release.apk"
 
 # All downloads go through backend's own endpoint
-APK_DOWNLOAD_URL = "https://rr-locker-api.onrender.com/api/v1/app/download"
-APK_PROVISIONING_URL = "https://rr-locker-api.onrender.com/api/v1/app/download"
+APK_DOWNLOAD_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download"
+APK_PROVISIONING_URL = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download"
 # SHA-256 checksum (URL-safe Base64)
 APK_CHECKSUM = "9pQNHmp25kjdJUjvb9wHIGlFBR3I2p9I2j8QJXlGdmI"
 APK_SIG_CHECKSUM = "M3cJdKiSRbG7UPF_EGalAIPWoFlc-86PsVrVtj6jDA4"

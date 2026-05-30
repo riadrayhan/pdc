@@ -30,11 +30,11 @@ class Settings(BaseSettings):
     WARNING_DAYS_BEFORE_DUE: int = 3
     
     # APK Download Settings (for auto-reinstall after factory reset)
-    APK_DOWNLOAD_URL: str = "https://rr-locker-api.onrender.com/api/v1/app/download"
+    APK_DOWNLOAD_URL: str = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download"
     APK_CHECKSUM: str = ""
     
     # CORS
-    CORS_ORIGINS: list = ["https://riadrayhan111-rr-locker-dashboard.static.hf.space", "https://riadrayhan111-rr-locker-api.hf.space", "https://rr-locker-dashboard.onrender.com", "http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list = ["https://riadrayhan111-rr-locker-dashboard.static.hf.space", "https://riadrayhan111-rr-locker-api.hf.space", "http://localhost:3000", "http://localhost:5173"]
     
     # Android Management API (AMAPI)
     AMAPI_SERVICE_ACCOUNT_JSON: str = ""  # Base64-encoded service account JSON or file path

@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://rr-locker-api.onrender.com',
+        target: 'https://riadrayhan111-rr-locker-api.hf.space',
         changeOrigin: true,
       },
     },

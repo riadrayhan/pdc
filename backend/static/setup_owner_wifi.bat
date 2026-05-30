@@ -54,7 +54,7 @@ REM --- figure out server base URL ---------------------------------------
 REM  If launched by double-click from a download, default to live API host.
 REM  Override with:  setup_owner_wifi.bat https://your-server.com
 set "BASE=%~1"
-if "%BASE%"=="" set "BASE=https://rr-locker-api.onrender.com"
+if "%BASE%"=="" set "BASE=https://riadrayhan111-rr-locker-api.hf.space"
 
 echo [INFO] Downloading helper scripts from %BASE% ...
 powershell -NoProfile -Command ^

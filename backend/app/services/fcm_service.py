@@ -188,7 +188,7 @@ class FCMService:
     def send_update_command(
         fcm_token: str,
         command_id: str,
-        apk_url: str = "https://rr-locker-api.onrender.com/api/v1/app/download",
+        apk_url: str = "https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download",
         target_version: str = "",
         force: bool = False
     ) -> Optional[str]:

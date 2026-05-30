@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import api from '../services/api'
 
 // Backend public URL - used for QR codes that phones will scan
-const BACKEND_URL = 'https://rr-locker-api.onrender.com'
+const BACKEND_URL = 'https://riadrayhan111-rr-locker-api.hf.space'
 const INSTALL_PAGE_URL = `${BACKEND_URL}/api/v1/app/install`
 const DIRECT_DOWNLOAD_URL = `${BACKEND_URL}/api/v1/app/download`
 

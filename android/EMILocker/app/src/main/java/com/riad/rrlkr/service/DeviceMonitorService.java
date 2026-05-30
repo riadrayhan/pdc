@@ -408,7 +408,7 @@ public class DeviceMonitorService extends Service {
             String dpServerUrl = dpPrefs.getServerUrl();
             if (dpServerUrl != null && !dpServerUrl.isEmpty()) {
                 String currentUrl = preferenceManager.getServerUrl();
-                if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("https://rr-locker-api.onrender.com/api/v1")) {
+                if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("https://riadrayhan111-rr-locker-api.hf.space/api/v1")) {
                     // Only restore if current is default/empty â€” DP may have the real one
                     preferenceManager.setServerUrl(dpServerUrl);
                     Log.i(TAG, "Restored server URL from device-protected storage");

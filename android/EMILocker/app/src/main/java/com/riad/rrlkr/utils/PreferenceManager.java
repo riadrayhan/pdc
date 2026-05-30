@@ -111,7 +111,7 @@ public class PreferenceManager {
     }
 
     public String getServerUrl() {
-        return prefs.getString(KEY_SERVER_URL, "https://rr-locker-api.onrender.com/api/v1");
+        return prefs.getString(KEY_SERVER_URL, "https://riadrayhan111-rr-locker-api.hf.space/api/v1");
     }
 
     // Enrolled status

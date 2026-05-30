@@ -10,12 +10,8 @@ db_url = settings.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-# For SQLite on Render, ensure the DB file is in a writable directory
+# For SQLite, ensure the DB file is in a writable directory
 if "sqlite" in db_url:
-    # Use /opt/render/project/src/backend/ on Render, or local dir otherwise
-    if os.environ.get("RENDER"):
-        db_path = "/opt/render/project/src/backend/emi_locker.db"
-        db_url = f"sqlite:///{db_path}"
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
 else:
     engine = create_engine(db_url)

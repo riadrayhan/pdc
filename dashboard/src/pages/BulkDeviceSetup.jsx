@@ -11,7 +11,7 @@ import {
   Wifi,
 } from 'lucide-react'
 
-const APK_DOWNLOAD_URL = 'https://rr-locker-api.onrender.com/api/v1/app/download'
+const APK_DOWNLOAD_URL = 'https://riadrayhan111-rr-locker-api.hf.space/api/v1/app/download'
 const DEVICE_ADMIN = 'com.riad.rrlkr/com.riad.rrlkr.admin.EMIDeviceAdminReceiver'
 const APK_CHECKSUM = '9pQNHmp25kjdJUjvb9wHIGlFBR3I2p9I2j8QJXlGdmI'
 const APK_SIG_CHECKSUM = 'M3cJdKiSRbG7UPF_EGalAIPWoFlc-86PsVrVtj6jDA4'
