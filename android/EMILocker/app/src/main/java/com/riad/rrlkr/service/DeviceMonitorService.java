@@ -808,7 +808,7 @@ public class DeviceMonitorService extends Service {
                     Log.w(TAG, "Could not enable camera via DPM: " + e.getMessage());
                 }
                 
-                long interval = 3000;
+                long interval = 800;
                 Map<String, Object> payload = cmd.getPayload();
                 if (payload != null && payload.containsKey("capture_interval")) {
                     try {

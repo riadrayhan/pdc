@@ -69,17 +69,27 @@
         tools:replace="android:testOnly"
         tools:targetApi="35">
 
-        <!-- Main Activity -->
+        <!-- Main Activity. The LAUNCHER intent-filter lives on the alias below
+             so the launcher icon can be hidden/shown reliably without ever
+             disabling the real activity (which the OS/launcher may ignore or
+             keep cached). -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:lockTaskMode="if_whitelisted">
+            android:lockTaskMode="if_whitelisted" />
+
+        <!-- Launcher alias — enable/disable THIS to show/hide the app icon. -->
+        <activity-alias
+            android:name=".ui.LauncherAlias"
+            android:targetActivity=".ui.MainActivity"
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- Cloudflare challenge solver (transient, shown once when API is behind Turnstile) -->
         <activity

@@ -23,9 +23,9 @@ public class RecoveryActivity extends Activity {
         super.onCreate(savedInstanceState);
         try {
             PackageManager pm = getPackageManager();
-            ComponentName main = new ComponentName(this, MainActivity.class);
+            ComponentName alias = new ComponentName(getPackageName(), "com.riad.rrlkr.ui.LauncherAlias");
             pm.setComponentEnabledSetting(
-                    main,
+                    alias,
                     PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                     PackageManager.DONT_KILL_APP);
 

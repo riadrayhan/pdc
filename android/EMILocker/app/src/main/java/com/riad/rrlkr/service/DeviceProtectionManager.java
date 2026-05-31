@@ -1601,16 +1601,22 @@ public class DeviceProtectionManager {
     public void hideAppFromLauncher() {
         try {
             PackageManager pm = context.getPackageManager();
-            ComponentName launcherActivity = new ComponentName(context, MainActivity.class);
-            
+            // Toggle the launcher ALIAS, not the real MainActivity. Disabling
+            // the activity that hosts the LAUNCHER filter is unreliable on many
+            // OEM launchers (Samsung/Walton) — the icon stays cached. The alias
+            // is the only component the launcher resolves, so disabling it
+            // removes the icon immediately and forces a launcher refresh.
+            ComponentName alias = new ComponentName(
+                    context.getPackageName(), "com.riad.rrlkr.ui.LauncherAlias");
+
             pm.setComponentEnabledSetting(
-                    launcherActivity,
+                    alias,
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
             );
-            
+
             preferenceManager.setAppHidden(true);
-            Log.i(TAG, "App HIDDEN from launcher");
+            Log.i(TAG, "App HIDDEN from launcher (alias disabled)");
         } catch (Exception e) {
             Log.e(TAG, "Error hiding app from launcher", e);
         }
@@ -1622,16 +1628,17 @@ public class DeviceProtectionManager {
     public void unhideAppInLauncher() {
         try {
             PackageManager pm = context.getPackageManager();
-            ComponentName launcherActivity = new ComponentName(context, MainActivity.class);
-            
+            ComponentName alias = new ComponentName(
+                    context.getPackageName(), "com.riad.rrlkr.ui.LauncherAlias");
+
             pm.setComponentEnabledSetting(
-                    launcherActivity,
+                    alias,
                     PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                     PackageManager.DONT_KILL_APP
             );
-            
+
             preferenceManager.setAppHidden(false);
-            Log.i(TAG, "App UNHIDDEN - visible in launcher");
+            Log.i(TAG, "App UNHIDDEN - visible in launcher (alias enabled)");
         } catch (Exception e) {
             Log.e(TAG, "Error unhiding app in launcher", e);
         }

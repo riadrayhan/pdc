@@ -260,14 +260,14 @@ public class App extends Application {
             }
             android.content.pm.PackageManager pm = getPackageManager();
             android.content.ComponentName launcher =
-                    new android.content.ComponentName(this, com.riad.rrlkr.ui.MainActivity.class);
+                    new android.content.ComponentName(getPackageName(), "com.riad.rrlkr.ui.LauncherAlias");
             int state = pm.getComponentEnabledSetting(launcher);
             if (state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
                 pm.setComponentEnabledSetting(
                         launcher,
                         android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         android.content.pm.PackageManager.DONT_KILL_APP);
-                Log.i(TAG, "Self-heal: re-enabled MainActivity launcher (was disabled, app not hidden)");
+                Log.i(TAG, "Self-heal: re-enabled launcher alias (was disabled, app not hidden)");
             }
         } catch (Exception e) {
             Log.w(TAG, "ensureLauncherVisibleIfNotHidden failed: " + e.getMessage());

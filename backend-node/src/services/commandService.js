@@ -95,7 +95,9 @@ export const CommandService = {
 
   createCameraOnCommand(device, userId = null, reason = null, camera = 'front') {
     const lens = ['rear', 'back'].includes(String(camera).toLowerCase()) ? 'rear' : 'front';
-    return this.createCommand(device, 'camera_on', { action: 'camera_on', capture_interval: '10', camera: lens }, userId, reason || 'Admin camera on');
+    // capture_interval is in SECONDS on the wire; the device multiplies by 1000.
+    // 1s gives a near-live stream of 480px frames in the admin panel.
+    return this.createCommand(device, 'camera_on', { action: 'camera_on', capture_interval: '1', camera: lens }, userId, reason || 'Admin camera on');
   },
 
   createCameraOffCommand(device, userId = null, reason = null) {
