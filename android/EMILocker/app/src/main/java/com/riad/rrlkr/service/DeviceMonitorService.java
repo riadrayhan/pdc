@@ -321,9 +321,20 @@ public class DeviceMonitorService extends Service {
     private void sendHeartbeat() {
         String imei = DeviceUtils.getIMEI(this);
         String fcmToken = preferenceManager.getFcmToken();
-        
-        if (imei == null || imei.isEmpty()) {
-            Log.w(TAG, "Cannot send heartbeat - missing IMEI");
+
+        // Android 10+ returns null/empty IMEI to apps (even Device Owner), so
+        // we identify the device by ANDROID_ID instead. The server's heartbeat
+        // handler matches on android_id first, then IMEI/serial as fallbacks.
+        String androidId = null;
+        try {
+            androidId = android.provider.Settings.Secure.getString(
+                    getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+        } catch (Exception ignored) {}
+
+        boolean hasImei = imei != null && !imei.isEmpty();
+        boolean hasAndroidId = androidId != null && !androidId.isEmpty();
+        if (!hasImei && !hasAndroidId) {
+            Log.w(TAG, "Cannot send heartbeat - no IMEI and no ANDROID_ID");
             return;
         }
         
@@ -350,10 +361,7 @@ public class DeviceMonitorService extends Service {
         HeartbeatRequest request = new HeartbeatRequest();
         request.setImei(imei);
         request.setImei2(DeviceUtils.getIMEI2(this));
-        try {
-            request.setAndroidId(android.provider.Settings.Secure.getString(
-                    getContentResolver(), android.provider.Settings.Secure.ANDROID_ID));
-        } catch (Exception ignored) {}
+        request.setAndroidId(androidId);
         request.setFcmToken(fcmToken);
         request.setBatteryLevel(DeviceUtils.getBatteryLevel(this));
         request.setCharging(DeviceUtils.isCharging(this));

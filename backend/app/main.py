@@ -189,23 +189,40 @@ async def health_check():
 DASHBOARD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
 if os.path.isdir(DASHBOARD_DIR):
+    # Headers that prevent the browser from caching the SPA HTML shell.
+    # The HTML references hashed asset files, so the shell MUST always be
+    # fetched fresh — otherwise an old cached index.html keeps pointing at
+    # stale JS/CSS and the dashboard shows outdated data.
+    _NO_CACHE_HEADERS = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+
+    def _serve_index():
+        return FileResponse(
+            os.path.join(DASHBOARD_DIR, "index.html"),
+            headers=_NO_CACHE_HEADERS,
+        )
+
     # Serve static assets (JS, CSS, images)
     app.mount("/assets", StaticFiles(directory=os.path.join(DASHBOARD_DIR, "assets")), name="static-assets")
 
     # Root serves dashboard
     @app.get("/")
     async def serve_root():
-        return FileResponse(os.path.join(DASHBOARD_DIR, "index.html"))
+        return _serve_index()
 
     # Catch-all: any path not matching /api, /docs, /health, /assets → SPA
     @app.get("/{full_path:path}")
     async def serve_dashboard(request: Request, full_path: str = ""):
-        # If it's a static file that exists, serve it
+        # If it's a static file that exists, serve it.
+        # index.html must never be cached (see _NO_CACHE_HEADERS above).
         file_path = os.path.join(DASHBOARD_DIR, full_path)
-        if os.path.isfile(file_path):
+        if os.path.isfile(file_path) and os.path.basename(file_path) != "index.html":
             return FileResponse(file_path)
         # Otherwise serve index.html for SPA client-side routing
-        return FileResponse(os.path.join(DASHBOARD_DIR, "index.html"))
+        return _serve_index()
 else:
     logger.warning(f"Dashboard static files not found at {DASHBOARD_DIR}")
 

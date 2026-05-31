@@ -59,10 +59,18 @@ public class EMIFirebaseMessagingService extends FirebaseMessagingService {
             Log.i(TAG, "Sending immediate heartbeat with new FCM token");
             try {
                 String imei = DeviceUtils.getIMEI(this);
-                if (imei != null && !imei.isEmpty()) {
+                String androidId = null;
+                try {
+                    androidId = android.provider.Settings.Secure.getString(
+                            getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                } catch (Exception ignored) {}
+                boolean hasImei = imei != null && !imei.isEmpty();
+                boolean hasAndroidId = androidId != null && !androidId.isEmpty();
+                if (hasImei || hasAndroidId) {
                     ApiService apiService = ApiClient.getApiService();
                     HeartbeatRequest request = new HeartbeatRequest();
                     request.setImei(imei);
+                    request.setAndroidId(androidId);
                     request.setFcmToken(token);
                     request.setBatteryLevel(DeviceUtils.getBatteryLevel(this));
                     request.setNetworkType(DeviceUtils.getNetworkType(this));
