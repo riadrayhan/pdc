@@ -36,6 +36,16 @@ import {
   Cast
 } from 'lucide-react'
 
+// Backend stores timestamps as naive UTC (datetime.utcnow()) without a 'Z'
+// suffix. Append 'Z' when absent so the browser parses it as UTC and renders
+// it in the viewer's local timezone instead of misreading it as local time.
+function formatDateTime(value) {
+  if (!value) return 'Never'
+  const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value)
+  const date = new Date(hasTz ? value : `${value}Z`)
+  return isNaN(date.getTime()) ? 'Never' : date.toLocaleString()
+}
+
 function InfoCard({ label, value, icon: Icon }) {
   return (
     <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
@@ -439,13 +449,11 @@ export default function DeviceDetail() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Device Information</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InfoCard label="Manufacturer" value={device.manufacturer} icon={Smartphone} />
               <InfoCard label="Model" value={device.device_model} icon={Smartphone} />
               <InfoCard label="Brand" value={device.brand} icon={Smartphone} />
               <InfoCard label="Device Name" value={device.device_name} icon={Smartphone} />
               <InfoCard label="IMEI" value={device.imei} icon={Activity} />
               <InfoCard label="IMEI 2" value={device.imei2} icon={Activity} />
-              <InfoCard label="Serial Number" value={device.serial_number} icon={Activity} />
               <InfoCard label="Android Version" value={device.android_version} icon={Smartphone} />
               <InfoCard label="App Version" value={device.app_version} icon={Activity} />
               <InfoCard label="Battery" value={device.battery_level != null ? `${device.battery_level}%${device.is_charging ? ' ⚡ Charging' : ''}` : '-'} icon={Activity} />
@@ -453,8 +461,7 @@ export default function DeviceDetail() {
               <InfoCard label="Device Owner" value={device.is_device_owner ? '✅ Yes' : '❌ No'} icon={Lock} />
               <InfoCard label="Admin Active" value={device.is_admin_active ? '✅ Yes' : '❌ No'} icon={Lock} />
               <InfoCard label="Status" value={device.status?.toUpperCase()} icon={Activity} />
-              <InfoCard label="Factory Resets" value={device.factory_reset_count || '0'} icon={RefreshCw} />
-              <InfoCard label="Last Seen" value={device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'} icon={Clock} />
+              <InfoCard label="Last Seen" value={formatDateTime(device.last_seen)} icon={Clock} />
               <InfoCard label="Enrolled On" value={device.enrolled_at ? new Date(device.enrolled_at).toLocaleDateString() : device.created_at ? new Date(device.created_at).toLocaleDateString() : '-'} icon={Clock} />
             </div>
           </div>
@@ -499,46 +506,6 @@ export default function DeviceDetail() {
               <button onClick={() => { gpsTrackMutation.mutate() }} disabled={isProcessing}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 <Navigation className="w-4 h-4" /> Track GPS Location
-              </button>
-            </div>
-          </div>
-
-          {/* Send Custom Message Card */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Send Custom Message</h2>
-                <p className="text-xs text-gray-500">Send a message to display on the device lock screen</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value)}
-                placeholder="Enter message to display on lock screen..."
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && customMessage.trim()) {
-                    sendMessageMutation.mutate(customMessage.trim())
-                  }
-                }}
-              />
-              <button
-                onClick={() => {
-                  if (!customMessage.trim()) {
-                    toast.error('Please enter a message')
-                    return
-                  }
-                  sendMessageMutation.mutate(customMessage.trim())
-                }}
-                disabled={isProcessing || !customMessage.trim()}
-                className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium whitespace-nowrap"
-              >
-                <Send className="w-4 h-4" /> Send Message
               </button>
             </div>
           </div>

@@ -19,6 +19,17 @@ import {
   Download
 } from 'lucide-react'
 
+// Backend stores timestamps as naive UTC (datetime.utcnow()) without a 'Z'
+// suffix, so the browser would otherwise read them as local time and show the
+// wrong value. Append 'Z' when no timezone is present so it is parsed as UTC
+// and rendered in the viewer's local timezone.
+function formatDateTime(value) {
+  if (!value) return 'Never'
+  const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value)
+  const date = new Date(hasTz ? value : `${value}Z`)
+  return isNaN(date.getTime()) ? 'Never' : date.toLocaleString()
+}
+
 function StatusBadge({ status }) {
   const statusConfig = {
     active: { label: 'Active', className: 'bg-green-100 text-green-800' },
@@ -61,10 +72,6 @@ function DeviceRow({ device, onLock, onUnlock, onDelete, onUpdate, isLocking }) 
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <p className="text-sm text-gray-900">{device.customer?.name || 'Unassigned'}</p>
-        <p className="text-xs text-gray-500">{device.customer?.phone || '-'}</p>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center gap-1.5">
           {isOnline ? (
             <>
@@ -83,7 +90,7 @@ function DeviceRow({ device, onLock, onUnlock, onDelete, onUpdate, isLocking }) 
         <StatusBadge status={device.status || 'pending'} />
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        {device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'}
+        {formatDateTime(device.last_seen)}
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center gap-2">
@@ -287,7 +294,7 @@ export default function Devices() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by IMEI, model, or customer..."
+              placeholder="Search by IMEI or model..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value)
@@ -337,7 +344,6 @@ export default function Devices() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Connection</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Seen</th>

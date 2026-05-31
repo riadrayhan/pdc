@@ -7,6 +7,7 @@ import {
   Lock,
   BarChart3,
   Cast,
+  Radio,
   FolderOpen
 } from 'lucide-react'
 
@@ -18,6 +19,7 @@ export default function Layout() {
     { path: '/', icon: Smartphone, label: 'Devices', match: ['/','devices'] },
     { path: '/metadata', icon: BarChart3, label: 'Device Metadata', match: ['metadata'] },
     { path: '/live-stream', icon: Cast, label: 'Live Stream', match: ['live-stream'] },
+    { path: '/live-audio', icon: Radio, label: 'Live Audio', match: ['live-audio'] },
     { path: '/files', icon: FolderOpen, label: 'File Manager', match: ['files'] },
   ]
 

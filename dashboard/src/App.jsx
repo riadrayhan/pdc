@@ -4,6 +4,7 @@ import Devices from './pages/Devices'
 import DeviceDetail from './pages/DeviceDetail'
 import Metadata from './pages/Metadata'
 import LiveStream from './pages/LiveStream'
+import LiveAudio from './pages/LiveAudio'
 import FileManager from './pages/FileManager'
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
         <Route path="devices/:id" element={<DeviceDetail />} />
         <Route path="metadata" element={<Metadata />} />
         <Route path="live-stream" element={<LiveStream />} />
+        <Route path="live-audio" element={<LiveAudio />} />
         <Route path="files" element={<FileManager />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -42,4 +42,8 @@ export const metadataService = {
     api.get('/metadata/behavior', { params: { device_id: deviceId, limit, offset } }),
 
   listDeviceIds: () => api.get('/metadata/devices'),
+
+  // Delete all rows of a metadata type (optionally scoped to one device)
+  deleteAll: (dataType, deviceId) =>
+    api.delete(`/metadata/${dataType}`, { params: deviceId ? { device_id: deviceId } : {} }),
 }

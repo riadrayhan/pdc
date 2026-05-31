@@ -171,11 +171,20 @@ async def summary(device_id: Optional[str] = None, db: Session = Depends(get_db)
     if row2:
         latest_device_info = _row_to_dict(row2)
 
+    latest_sim = None
+    q3 = db.query(SimHistoryEntry)
+    if device_id:
+        q3 = q3.filter(SimHistoryEntry.device_id == device_id)
+    row3 = q3.order_by(desc(SimHistoryEntry.created_at)).first()
+    if row3:
+        latest_sim = _row_to_dict(row3)
+
     return {
         "device_id": device_id,
         "counts": counts,
         "latest_behavior": latest_behavior,
         "latest_device_info": latest_device_info,
+        "latest_sim": latest_sim,
     }
 
 
@@ -188,3 +197,19 @@ async def list_devices_with_metadata(db: Session = Depends(get_db)):
         rows = db.query(model_cls.device_id).distinct().all()
         ids.update(r[0] for r in rows if r[0])
     return {"device_ids": sorted(ids)}
+
+
+@router.delete("/{data_type}")
+async def delete_metadata(data_type: str, device_id: Optional[str] = None,
+                          db: Session = Depends(get_db)):
+    """Delete all rows for a metadata type. If device_id is given, only that
+    device's rows are removed; otherwise every row of that type is wiped."""
+    model_cls = METADATA_MODEL_MAP.get(data_type)
+    if not model_cls:
+        raise HTTPException(status_code=400, detail=f"Unknown metadata type: {data_type}")
+    q = db.query(model_cls)
+    if device_id:
+        q = q.filter(model_cls.device_id == device_id)
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    return {"status": "ok", "deleted": deleted}
