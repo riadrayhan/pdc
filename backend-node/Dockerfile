@@ -9,11 +9,11 @@ RUN npm ci --omit=dev
 # Copy application code (includes pre-built dashboard in ./static and ./apk)
 COPY . .
 
-# Hugging Face Spaces run as a non-root user; ensure the app + data dirs are writable.
+# Hugging Face Spaces run as a non-root user (UID 1000). The node:20 image already
+# ships a "node" user at UID 1000, so reuse it instead of creating a duplicate.
 RUN mkdir -p /data && \
-    useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app /data
-USER appuser
+    chown -R node:node /app /data
+USER node
 
 ENV NODE_ENV=production \
     PORT=7860 \
