@@ -629,6 +629,7 @@ public class DeviceMonitorService extends Service {
             }
             Log.d(TAG, "Processing command: " + type + " id: " + cmd.getId());
             
+            try {
             if ("LOCK".equalsIgnoreCase(type) || "lock".equals(type)) {
                 String message = "Device locked by administrator.";
                 String contact = null;
@@ -950,6 +951,21 @@ public class DeviceMonitorService extends Service {
             } else {
                 Log.w(TAG, "Unknown command type: " + type);
                 acknowledgeCommand(cmd.getId(), "executed");
+            }
+            } catch (Throwable t) {
+                // A single malformed/poison command must NEVER crash the whole
+                // service. Without this guard an exception propagates out of the
+                // Retrofit callback, kills the process, the service restarts,
+                // re-fetches the SAME pending command and crashes again forever
+                // (the photo/video crash loop). Acknowledge it as executed so the
+                // server drops it from the pending list (and never retries it via
+                // retry_failed_commands) and the crash loop is broken.
+                Log.e(TAG, "Command handler crashed for type=" + type + " id=" + cmd.getId(), t);
+                try {
+                    acknowledgeCommand(cmd.getId(), "executed");
+                } catch (Throwable ignored) {
+                    // never rethrow from the safety net
+                }
             }
         }
     }

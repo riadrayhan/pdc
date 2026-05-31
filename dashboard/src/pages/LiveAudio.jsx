@@ -51,6 +51,7 @@ function useAudioStream(deviceId, enabled, muted) {
   const wsRef = useRef(null)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
+  const analyserRef = useRef(null)
   const nextStartRef = useRef(0)
   const formatRef = useRef({ sampleRate: 16000, channels: 1 })
 
@@ -60,6 +61,19 @@ function useAudioStream(deviceId, enabled, muted) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext
     const ctx = new AudioCtx()
     ctxRef.current = ctx
+    // Browsers create the AudioContext in a "suspended" state when it is not
+    // started directly from a user gesture (here it is created after an awaited
+    // API call). Without resuming it, no audio is ever played to the speakers.
+    const resume = () => { if (ctx.state === 'suspended') ctx.resume().catch(() => {}) }
+    resume()
+
+    // Analyser taps the audio for the live waveform; it is fed independently of
+    // the output gain so the waveform keeps moving even when muted.
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 2048
+    analyser.smoothingTimeConstant = 0.6
+    analyserRef.current = analyser
+
     const gain = ctx.createGain()
     gain.gain.value = muted ? 0 : 1
     gain.connect(ctx.destination)
@@ -70,7 +84,7 @@ function useAudioStream(deviceId, enabled, muted) {
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
 
-    ws.onopen = () => { setConnected(true); setError(null) }
+    ws.onopen = () => { setConnected(true); setError(null); resume() }
     ws.onclose = () => { setConnected(false) }
     ws.onerror = () => { setError('Audio WebSocket error'); setConnected(false) }
     ws.onmessage = (ev) => {
@@ -97,9 +111,11 @@ function useAudioStream(deviceId, enabled, muted) {
           out[i] = pcm[i * channels + ch] / 32768
         }
       }
+      resume()
       const src = ctx.createBufferSource()
       src.buffer = buf
       src.connect(gain)
+      src.connect(analyser)
       const now = ctx.currentTime
       const start = Math.max(now + 0.06, nextStartRef.current)
       src.start(start)
@@ -114,6 +130,7 @@ function useAudioStream(deviceId, enabled, muted) {
       try { ctx.close() } catch { /* noop */ }
       ctxRef.current = null
       gainRef.current = null
+      analyserRef.current = null
       nextStartRef.current = 0
       setConnected(false)
     }
@@ -124,7 +141,71 @@ function useAudioStream(deviceId, enabled, muted) {
     if (gainRef.current) gainRef.current.gain.value = muted ? 0 : 1
   }, [muted])
 
-  return { connected, info, error }
+  return { connected, info, error, analyserRef }
+}
+
+/**
+ * Draws a live waveform from an AnalyserNode so the operator can visually
+ * confirm that microphone audio is actually arriving from the device.
+ */
+function Waveform({ analyserRef, active }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    const ctx2d = canvas.getContext('2d')
+    let raf = 0
+    const data = new Uint8Array(2048)
+
+    const draw = () => {
+      raf = requestAnimationFrame(draw)
+      const w = canvas.width
+      const h = canvas.height
+      ctx2d.clearRect(0, 0, w, h)
+      ctx2d.fillStyle = '#f0fdf4'
+      ctx2d.fillRect(0, 0, w, h)
+
+      const analyser = analyserRef.current
+      if (!analyser || !active) {
+        // Flat idle line
+        ctx2d.strokeStyle = '#9ca3af'
+        ctx2d.lineWidth = 2
+        ctx2d.beginPath()
+        ctx2d.moveTo(0, h / 2)
+        ctx2d.lineTo(w, h / 2)
+        ctx2d.stroke()
+        return
+      }
+
+      const buf = data.subarray(0, analyser.fftSize)
+      analyser.getByteTimeDomainData(buf)
+      ctx2d.strokeStyle = '#16a34a'
+      ctx2d.lineWidth = 2
+      ctx2d.beginPath()
+      const slice = w / buf.length
+      let x = 0
+      for (let i = 0; i < buf.length; i++) {
+        const v = buf[i] / 128 - 1 // -1..1
+        const y = h / 2 + v * (h / 2) * 0.95
+        if (i === 0) ctx2d.moveTo(x, y)
+        else ctx2d.lineTo(x, y)
+        x += slice
+      }
+      ctx2d.stroke()
+    }
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [analyserRef, active])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={560}
+      height={120}
+      className="w-full h-[120px] rounded-md border border-green-200 bg-green-50"
+    />
+  )
 }
 
 export default function LiveAudio() {
@@ -142,7 +223,7 @@ export default function LiveAudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId])
 
-  const { connected: audioConn, info: audioInfo, error } = useAudioStream(deviceId, audioOn, muted)
+  const { connected: audioConn, info: audioInfo, error, analyserRef } = useAudioStream(deviceId, audioOn, muted)
 
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ['audio-status', deviceId],
@@ -231,6 +312,13 @@ export default function LiveAudio() {
                       : 'Waiting for the device to start streaming…')
                   : 'Idle'}
             </p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-gray-500 flex items-center gap-1">
+              <Radio className="w-3.5 h-3.5 text-green-600" /> Microphone waveform
+            </p>
+            <Waveform analyserRef={analyserRef} active={audioOn && live} />
           </div>
 
           <div className="flex gap-2">

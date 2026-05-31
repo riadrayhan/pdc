@@ -209,41 +209,21 @@ public class FileManagerService extends Service {
 
         // MANAGE_EXTERNAL_STORAGE (all-files access) is an App-Op, not a
         // runtime permission â€” it cannot be granted silently even by a Device
-        // Owner. If not held, open the dedicated settings panel so the admin
-        // can flip the switch with a single tap.
+        // Owner. If not held, try a silent grant of the all-files app-op. This
+        // succeeds on ROMs where the Device Owner is allowed to set app-op
+        // modes and makes the file manager work with zero user interaction.
+        //
+        // We intentionally do NOT open the system settings panel anymore: photos
+        // and videos (and the rest of the user's media) are already listed via
+        // MediaStore using the granular READ_MEDIA_* permissions granted above,
+        // so the all-files panel only annoyed the user by repeatedly pulling
+        // them out of the app and into Settings/Gallery even after they had
+        // already allowed everything.
         if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
-            // First try a silent grant of the all-files app-op. This succeeds on
-            // ROMs where the Device Owner is allowed to set app-op modes and
-            // makes the file manager work with zero user interaction; on stock
-            // AOSP it throws SecurityException and we fall back to the panel.
             if (tryGrantAllFilesAccessSilently()) {
                 Log.i(TAG, "Granted MANAGE_EXTERNAL_STORAGE silently via AppOps");
-                return;
-            }
-            // Re-prompt the user until access is actually granted, but throttle
-            // so we don't reopen the panel several times in quick succession.
-            // Each new file-manager session that still lacks access will show
-            // the panel again, so the user gets another chance to allow it.
-            long now = System.currentTimeMillis();
-            if (now - lastAllFilesPromptAt < ALL_FILES_PROMPT_THROTTLE_MS) {
-                return;
-            }
-            lastAllFilesPromptAt = now;
-            try {
-                Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-                Log.i(TAG, "Opened MANAGE_EXTERNAL_STORAGE settings panel");
-            } catch (Throwable t) {
-                // Fallback to the global manage-all-files screen
-                try {
-                    Intent i = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(i);
-                } catch (Throwable ignored) {
-                    Log.w(TAG, "Could not open all-files-access settings: " + t.getMessage());
-                }
+            } else {
+                Log.i(TAG, "All-files access not held; relying on MediaStore for media listing");
             }
         }
     }
