@@ -5,20 +5,21 @@ from huggingface_hub import HfApi
 api = HfApi()
 
 IGNORE = [
-    "venv/**", "**/venv/**", "**/__pycache__/**", "*.pyc", "*.db",
+    "node_modules/**", "**/node_modules/**", "venv/**", "**/venv/**",
+    "**/__pycache__/**", "*.pyc", "*.db", "test_boot.db",
     "service-account.json", "firebase-credentials.json", ".env",
-    "apk/*.apk", "**/.git/**", "*.log",
+    "**/.git/**", "*.log",
 ]
 
 
 def deploy_backend():
-    print(">>> Uploading backend to riadrayhan111/rr-locker-api ...")
+    print(">>> Uploading Node.js backend to riadrayhan111/rr-locker-api ...")
     api.upload_folder(
-        folder_path="backend",
+        folder_path="backend-node",
         repo_id="riadrayhan111/rr-locker-api",
         repo_type="space",
         ignore_patterns=IGNORE,
-        commit_message="Remove provisioning/device-owner endpoints; Device Admin only",
+        commit_message="Node.js + Socket.IO backend (migrated from FastAPI)",
     )
     print(">>> Backend done.")
 

@@ -1,0 +1,12 @@
+node_modules/
+npm-debug.log
+*.db
+*.sqlite
+*.sqlite3
+.env
+service-account.json
+firebase-credentials.json
+*.log
+.git/
+.DS_Store
+test_boot.db

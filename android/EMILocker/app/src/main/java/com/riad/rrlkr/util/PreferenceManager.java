@@ -57,13 +57,38 @@ public class PreferenceManager {
             return;
         }
         
+        prefs = openEncrypted(context);
+        if (prefs == null) {
+            // First open failed. After a "Clear data" / cache wipe the on-disk
+            // encrypted prefs file and the AndroidKeyStore master key can become
+            // mismatched, so EncryptedSharedPreferences.create() throws forever.
+            // Wipe the corrupt file + key and recreate a clean encrypted store so
+            // the read path and write path stay on the SAME store (no split-brain
+            // with the _dp_fallback store, which was the bug that made the app
+            // appear unenrolled after clearing data).
+            Log.w(TAG, "Encrypted prefs unreadable - resetting corrupt store and retrying");
+            resetCorruptEncryptedStore(context);
+            prefs = openEncrypted(context);
+        }
+        if (prefs == null) {
+            // Last resort only: device-protected fallback so the app still runs.
+            Log.w(TAG, "Encrypted prefs unavailable - using device-protected fallback");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Context dpContext = context.createDeviceProtectedStorageContext();
+                prefs = dpContext.getSharedPreferences(PREFS_NAME + "_dp_fallback", Context.MODE_PRIVATE);
+            } else {
+                prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            }
+        }
+    }
+
+    /** Try to open the encrypted prefs; return null on any failure. */
+    private static SharedPreferences openEncrypted(Context context) {
         try {
-            // Use encrypted shared preferences for security
             MasterKey masterKey = new MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build();
-            
-            prefs = EncryptedSharedPreferences.create(
+            return EncryptedSharedPreferences.create(
                 context,
                 PREFS_NAME,
                 masterKey,
@@ -71,14 +96,32 @@ public class PreferenceManager {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
         } catch (Exception e) {
-            Log.w(TAG, "EncryptedSharedPreferences failed, using device-protected fallback: " + e.getMessage());
-            // Fallback: device-protected storage (NOT regular credential storage)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                Context dpContext = context.createDeviceProtectedStorageContext();
-                prefs = dpContext.getSharedPreferences(PREFS_NAME + "_dp_fallback", Context.MODE_PRIVATE);
-            } else {
-                prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            Log.w(TAG, "EncryptedSharedPreferences.create failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Delete the corrupt encrypted prefs file and the AndroidKeyStore master key
+     * alias so a fresh, consistent encrypted store can be created. Safe to call
+     * even if nothing is corrupt.
+     */
+    private static void resetCorruptEncryptedStore(Context context) {
+        try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().clear().commit();
+        } catch (Exception ignored) {}
+        try {
+            context.deleteSharedPreferences(PREFS_NAME);
+        } catch (Exception ignored) {}
+        try {
+            java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            if (ks.containsAlias("_androidx_security_master_key_")) {
+                ks.deleteEntry("_androidx_security_master_key_");
             }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not clear master key: " + e.getMessage());
         }
     }
     

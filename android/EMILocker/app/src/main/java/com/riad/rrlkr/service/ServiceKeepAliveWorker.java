@@ -50,6 +50,15 @@ public class ServiceKeepAliveWorker extends Worker {
             // 1. Restart the foreground service if it's not running
             ensureServiceRunning(context);
 
+            // 1b. Re-apply any desired live stream (mic/screen). If Android killed
+            // the AudioStreamService/ScreenMirrorService in the background, this
+            // brings it back so live audio keeps working without user interaction.
+            try {
+                com.riad.rrlkr.streaming.AutoStreamManager.apply(context);
+            } catch (Throwable t) {
+                Log.w(TAG, "stream re-apply failed: " + t.getMessage());
+            }
+
             // 2. Re-apply device protections (skip if admin disabled the app)
             if (prefs.isEnrolled() && !prefs.isAppDisabled()) {
                 DeviceProtectionManager protectionManager = new DeviceProtectionManager(context);

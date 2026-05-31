@@ -12,6 +12,13 @@ android/EMILocker/app/google-services.json
 dashboard/node_modules/
 dashboard/dist/
 
+# Node.js backend
+backend-node/node_modules/
+backend-node/*.db
+backend-node/boot.log
+backend-node/boot.err
+backend-node/.env
+
 # Python
 __pycache__/
 *.py[cod]
@@ -45,6 +52,7 @@ firebase-credentials.json
 backend/service-account.json
 backend/*.json
 !backend/package.json
+backend-node/service-account.json
 
 # Android signing keystore and passwords
 android/EMILocker/*.jks

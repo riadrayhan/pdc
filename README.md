@@ -6,14 +6,14 @@
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Admin Dashboard│────▶│  Python Backend │────▶│  Android App    │
-│  (React)        │     │  (FastAPI)      │     │  (Java)         │
+│  Admin Dashboard│────▶│  Node.js Backend│────▶│  Android App    │
+│  (React)        │     │  (Express + IO) │     │  (Java)         │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                │                        │
                                ▼                        ▼
                         ┌─────────────────┐     ┌─────────────────┐
-                        │  PostgreSQL     │     │  Firebase FCM   │
-                        │  + Redis        │     │                 │
+                        │  SQLite/Postgres│     │  Firebase FCM   │
+                        │  (Sequelize)    │     │                 │
                         └─────────────────┘     └─────────────────┘
 ```
 
@@ -21,16 +21,15 @@
 
 ```
 emi_locker/
-├── backend/                 # Python FastAPI Backend
-│   ├── app/
-│   │   ├── api/            # API routes
+├── backend-node/            # Node.js (Express + Socket.IO) Backend
+│   ├── src/
+│   │   ├── routes/         # REST API routes
 │   │   ├── core/           # Config, security
-│   │   ├── models/         # SQLAlchemy models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   ├── services/       # Business logic
-│   │   └── tasks/          # Celery tasks
-│   ├── alembic/            # Database migrations
-│   └── requirements.txt
+│   │   ├── models/         # Sequelize models
+│   │   ├── services/       # Business logic, realtime, stream bridge
+│   │   └── utils/          # Enums, helpers
+│   ├── apk/                # Android APK + version manifest
+│   └── package.json
 │
 ├── android/                 # Java Android App
 │   └── EMILocker/
@@ -49,11 +48,12 @@ emi_locker/
 
 ## Features
 
-### Backend (Python FastAPI)
+### Backend (Node.js — Express + Socket.IO)
 - Device registration and management
 - Customer and EMI contract management
 - Firebase Cloud Messaging integration
-- Auto-lock scheduler with Celery
+- Auto-lock scheduler with in-process node-cron
+- Real-time screen/audio/file streaming (Socket.IO + WebSocket bridge)
 - JWT authentication
 - Audit logging
 
@@ -78,12 +78,9 @@ emi_locker/
 ### 1. Backend Setup
 
 ```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate  # Windows
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload
+cd backend-node
+npm install
+npm start
 ```
 
 ### 2. Dashboard Setup
@@ -105,26 +102,24 @@ npm run dev
 3. Scan QR code generated from admin dashboard
 4. Device will automatically provision with EMI Locker app
 
-## API Documentation
+## API
 
-After starting backend, visit:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+All REST endpoints are served under `/api/v1`. Health check at `/health`.
+Real-time layer (Socket.IO) is mounted at the server root (`/dashboard`, `/device`
+namespaces) and a raw WebSocket bridge handles device screen/audio/file streams.
 
 ## Live Deployment (Hugging Face Spaces)
 
 - Backend API: https://riadrayhan111-rr-locker-api.hf.space
-- API Docs: https://riadrayhan111-rr-locker-api.hf.space/docs
 - Admin Dashboard: https://riadrayhan111-rr-locker-dashboard.static.hf.space
 
 ## Environment Variables
 
 ### Backend (.env)
 ```
-DATABASE_URL=postgresql://user:pass@localhost/emilocker
-REDIS_URL=redis://localhost:6379
+DATABASE_URL=postgresql://user:pass@localhost/emilocker  # optional; defaults to SQLite on /data
+PORT=7860
 SECRET_KEY=your-secret-key
-FIREBASE_CREDENTIALS_PATH=firebase-credentials.json
 ```
 
 ## License

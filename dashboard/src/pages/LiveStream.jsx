@@ -8,6 +8,7 @@ import {
   Search,
 } from 'lucide-react'
 import { streamingService } from '../services/streamingService'
+import { watchScreen } from '../services/realtimeClient'
 import { deviceService } from '../services/emiService'
 
 function useDeviceList() {
@@ -48,31 +49,28 @@ function useScreenStream(deviceId, enabled) {
   const [fps, setFps] = useState(0)
   const frameCounter = useRef(0)
   const fpsTimer = useRef(null)
-  const wsRef = useRef(null)
   const lastBlobUrl = useRef(null)
 
   useEffect(() => {
     if (!deviceId || !enabled) return undefined
-    const url = streamingService.viewerUrl(deviceId)
-    const ws = new WebSocket(url)
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
 
-    ws.onopen = () => { setConnected(true); setError(null) }
-    ws.onclose = () => { setConnected(false) }
-    ws.onerror = () => { setError('WebSocket error'); setConnected(false) }
-    ws.onmessage = (ev) => {
-      if (typeof ev.data === 'string') return // ignore text events
-      const blob = new Blob([ev.data], { type: 'image/jpeg' })
-      const u = URL.createObjectURL(blob)
-      setFrameUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return u
-      })
-      if (lastBlobUrl.current) URL.revokeObjectURL(lastBlobUrl.current)
-      lastBlobUrl.current = u
-      frameCounter.current += 1
-    }
+    const ctrl = watchScreen(deviceId, {
+      onStatus: (s) => {
+        if (s === 'connected' || s === 'publisher-online') { setConnected(true); setError(null) }
+        if (s === 'disconnected') setConnected(false)
+      },
+      onFrame: (data) => {
+        const blob = new Blob([data], { type: 'image/jpeg' })
+        const u = URL.createObjectURL(blob)
+        setFrameUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return u
+        })
+        if (lastBlobUrl.current) URL.revokeObjectURL(lastBlobUrl.current)
+        lastBlobUrl.current = u
+        frameCounter.current += 1
+      },
+    })
 
     fpsTimer.current = setInterval(() => {
       setFps(frameCounter.current)
@@ -81,7 +79,7 @@ function useScreenStream(deviceId, enabled) {
 
     return () => {
       clearInterval(fpsTimer.current)
-      try { ws.close() } catch { /* noop */ }
+      try { ctrl.close() } catch { /* noop */ }
       if (lastBlobUrl.current) {
         URL.revokeObjectURL(lastBlobUrl.current)
         lastBlobUrl.current = null

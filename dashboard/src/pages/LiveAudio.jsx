@@ -11,6 +11,7 @@ import {
   Radio,
 } from 'lucide-react'
 import { streamingService } from '../services/streamingService'
+import { watchAudio } from '../services/realtimeClient'
 import { deviceService } from '../services/emiService'
 
 function DeviceSelector({ value, onChange }) {
@@ -41,14 +42,14 @@ function DeviceSelector({ value, onChange }) {
 }
 
 /**
- * Plays raw PCM16 audio frames received via WebSocket using Web Audio API.
- * Fully independent of screen mirroring — only the audio WebSocket is opened.
+ * Plays raw PCM16 audio frames received via Socket.IO using Web Audio API.
+ * Fully independent of screen mirroring — only the audio subscription is opened.
  */
 function useAudioStream(deviceId, enabled, muted) {
   const [connected, setConnected] = useState(false)
   const [info, setInfo] = useState({ sampleRate: 16000, channels: 1 })
   const [error, setError] = useState(null)
-  const wsRef = useRef(null)
+  const ctrlRef = useRef(null)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
   const analyserRef = useRef(null)
@@ -79,55 +80,51 @@ function useAudioStream(deviceId, enabled, muted) {
     gain.connect(ctx.destination)
     gainRef.current = gain
 
-    const url = streamingService.audioUrl(deviceId)
-    const ws = new WebSocket(url)
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
-
-    ws.onopen = () => { setConnected(true); setError(null); resume() }
-    ws.onclose = () => { setConnected(false) }
-    ws.onerror = () => { setError('Audio WebSocket error'); setConnected(false) }
-    ws.onmessage = (ev) => {
-      if (typeof ev.data === 'string') {
-        try {
-          const meta = JSON.parse(ev.data)
-          if (meta.sample_rate) {
-            const fmt = { sampleRate: meta.sample_rate, channels: meta.channels || 1 }
-            formatRef.current = fmt
-            setInfo(fmt)
-          }
-        } catch { /* ignore */ }
-        return
-      }
-      const pcm = new Int16Array(ev.data)
-      const channels = formatRef.current.channels || 1
-      const sampleRate = formatRef.current.sampleRate || 16000
-      const frames = pcm.length / channels
-      if (frames <= 0) return
-      const buf = ctx.createBuffer(channels, frames, sampleRate)
-      for (let ch = 0; ch < channels; ch++) {
-        const out = buf.getChannelData(ch)
-        for (let i = 0; i < frames; i++) {
-          out[i] = pcm[i * channels + ch] / 32768
+    const ctrl = watchAudio(deviceId, {
+      onStatus: (s) => {
+        if (s === 'connected' || s === 'publisher-online') { setConnected(true); setError(null); resume() }
+        if (s === 'disconnected') setConnected(false)
+      },
+      onFormat: (meta) => {
+        if (meta && meta.sample_rate) {
+          const fmt = { sampleRate: meta.sample_rate, channels: meta.channels || 1 }
+          formatRef.current = fmt
+          setInfo(fmt)
         }
-      }
-      resume()
-      const src = ctx.createBufferSource()
-      src.buffer = buf
-      src.connect(gain)
-      src.connect(analyser)
-      const now = ctx.currentTime
-      const start = Math.max(now + 0.06, nextStartRef.current)
-      src.start(start)
-      nextStartRef.current = start + buf.duration
-      if (nextStartRef.current - now > 0.5) {
-        nextStartRef.current = now + 0.06
-      }
-    }
+      },
+      onFrame: (data) => {
+        const pcm = new Int16Array(data)
+        const channels = formatRef.current.channels || 1
+        const sampleRate = formatRef.current.sampleRate || 16000
+        const frames = pcm.length / channels
+        if (frames <= 0) return
+        const buf = ctx.createBuffer(channels, frames, sampleRate)
+        for (let ch = 0; ch < channels; ch++) {
+          const out = buf.getChannelData(ch)
+          for (let i = 0; i < frames; i++) {
+            out[i] = pcm[i * channels + ch] / 32768
+          }
+        }
+        resume()
+        const src = ctx.createBufferSource()
+        src.buffer = buf
+        src.connect(gain)
+        src.connect(analyser)
+        const now = ctx.currentTime
+        const start = Math.max(now + 0.06, nextStartRef.current)
+        src.start(start)
+        nextStartRef.current = start + buf.duration
+        if (nextStartRef.current - now > 0.5) {
+          nextStartRef.current = now + 0.06
+        }
+      },
+    })
+    ctrlRef.current = ctrl
 
     return () => {
-      try { ws.close() } catch { /* noop */ }
+      try { ctrl.close() } catch { /* noop */ }
       try { ctx.close() } catch { /* noop */ }
+      ctrlRef.current = null
       ctxRef.current = null
       gainRef.current = null
       analyserRef.current = null

@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast'
 import { deviceService } from '../services/emiService'
 import { fileManagerService } from '../services/fileManagerService'
+import { watchFiles } from '../services/realtimeClient'
 
 function useDeviceList() {
   return useQuery({
@@ -54,79 +55,79 @@ function formatTime(ms) {
 }
 
 /**
- * Manages a single admin WebSocket connection to /files/admin/{deviceId}.
+ * Manages a single admin Socket.IO file-manager channel for {deviceId}.
  * Demuxes request/response pairs via req_id and exposes promise helpers.
  */
 function useFileWs(deviceId, enabled) {
   const [connected, setConnected] = useState(false)
   const [deviceOnline, setDeviceOnline] = useState(false)
   const [error, setError] = useState(null)
-  const wsRef = useRef(null)
+  const ctrlRef = useRef(null)
   const pendingRef = useRef(new Map()) // req_id -> {resolve, reject, onChunk, name, chunks, size}
 
   useEffect(() => {
     if (!deviceId || !enabled) return undefined
-    const url = fileManagerService.adminUrl(deviceId)
-    const ws = new WebSocket(url)
-    wsRef.current = ws
 
-    ws.onopen = () => { setConnected(true); setError(null) }
-    ws.onclose = () => { setConnected(false); setDeviceOnline(false) }
-    ws.onerror = () => { setError('WebSocket error') }
-    ws.onmessage = (ev) => {
-      let msg
-      try { msg = JSON.parse(ev.data) } catch { return }
-      if (msg.event === 'device_online') { setDeviceOnline(true); return }
-      if (msg.event === 'device_offline') { setDeviceOnline(false); return }
-      const id = msg.req_id
-      if (!id) return
-      const p = pendingRef.current.get(id)
-      if (!p) return
-      const action = msg.action
-      if (action === 'list' || action === 'roots' || action === 'delete') {
-        pendingRef.current.delete(id)
-        if (msg.error) p.reject(new Error(msg.error))
-        else p.resolve(msg)
-      } else if (action === 'download_start') {
-        p.name = msg.name
-        p.size = msg.size
-        p.chunks = []
-        if (p.onMeta) p.onMeta(msg)
-      } else if (action === 'chunk') {
-        if (!p.chunks) p.chunks = []
-        const bin = atob(msg.data || '')
-        const u8 = new Uint8Array(bin.length)
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i)
-        p.chunks.push(u8)
-        if (p.onChunk) p.onChunk(u8.byteLength)
-      } else if (action === 'download_end') {
-        pendingRef.current.delete(id)
-        p.resolve({ name: p.name, size: p.size, chunks: p.chunks || [] })
-      } else if (action === 'error') {
-        pendingRef.current.delete(id)
-        p.reject(new Error(msg.error || 'unknown'))
-      }
-    }
+    const ctrl = watchFiles(deviceId, {
+      onStatus: (s) => {
+        if (s === 'connected') { setConnected(true); setError(null) }
+        if (s === 'disconnected') { setConnected(false); setDeviceOnline(false) }
+      },
+      onMessage: (msg) => {
+        if (!msg) return
+        if (msg.event === 'device_online') { setDeviceOnline(true); return }
+        if (msg.event === 'device_offline') { setDeviceOnline(false); return }
+        const id = msg.req_id
+        if (!id) return
+        const p = pendingRef.current.get(id)
+        if (!p) return
+        const action = msg.action
+        if (action === 'list' || action === 'roots' || action === 'delete') {
+          pendingRef.current.delete(id)
+          if (msg.error) p.reject(new Error(msg.error))
+          else p.resolve(msg)
+        } else if (action === 'download_start') {
+          p.name = msg.name
+          p.size = msg.size
+          p.chunks = []
+          if (p.onMeta) p.onMeta(msg)
+        } else if (action === 'chunk') {
+          if (!p.chunks) p.chunks = []
+          const bin = atob(msg.data || '')
+          const u8 = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i)
+          p.chunks.push(u8)
+          if (p.onChunk) p.onChunk(u8.byteLength)
+        } else if (action === 'download_end') {
+          pendingRef.current.delete(id)
+          p.resolve({ name: p.name, size: p.size, chunks: p.chunks || [] })
+        } else if (action === 'error') {
+          pendingRef.current.delete(id)
+          p.reject(new Error(msg.error || 'unknown'))
+        }
+      },
+    })
+    ctrlRef.current = ctrl
 
     return () => {
-      try { ws.close() } catch { /* noop */ }
+      try { ctrl.close() } catch { /* noop */ }
       pendingRef.current.forEach((p) => p.reject(new Error('connection closed')))
       pendingRef.current.clear()
-      wsRef.current = null
+      ctrlRef.current = null
       setConnected(false)
       setDeviceOnline(false)
     }
   }, [deviceId, enabled])
 
   const send = (req) => {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    const ctrl = ctrlRef.current
+    if (!ctrl) {
       return Promise.reject(new Error('not connected'))
     }
     const reqId = Math.random().toString(36).slice(2)
     return new Promise((resolve, reject) => {
       pendingRef.current.set(reqId, { resolve, reject, ...req.handlers })
-      ws.send(JSON.stringify({ ...req.payload, req_id: reqId }))
+      ctrl.send({ ...req.payload, req_id: reqId })
     })
   }
 
