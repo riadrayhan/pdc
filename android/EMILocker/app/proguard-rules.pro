@@ -23,6 +23,17 @@
 # Keep Gson models
 -keep class com.google.gson.** { *; }
 -keep class com.riad.rrlkr.model.** { *; }
+# Keep all network DTOs / request / response models used by Gson + Retrofit.
+# These live under network/ and network/models/ and MUST NOT be obfuscated or
+# merged by R8 (proguard-android-optimize), otherwise Gson deserialization can
+# throw ClassCastException after class merging.
+-keep class com.riad.rrlkr.network.models.** { *; }
+-keep class com.riad.rrlkr.network.** { *; }
+# Keep @SerializedName-annotated fields in any class (safety net).
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+# Do not horizontally/vertically merge model classes.
 -keepattributes Signature
 -keepattributes *Annotation*
 

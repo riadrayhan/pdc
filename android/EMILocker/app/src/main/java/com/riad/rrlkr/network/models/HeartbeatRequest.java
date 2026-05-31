@@ -4,6 +4,9 @@ import com.google.gson.annotations.SerializedName;
 
 public class HeartbeatRequest {
     
+    @SerializedName("device_id")
+    private String deviceId;
+    
     @SerializedName("imei")
     private String imei;
     
@@ -53,6 +56,9 @@ public class HeartbeatRequest {
     private Boolean isAdminActive;
     
     // Getters and Setters
+    
+    public String getDeviceId() { return deviceId; }
+    public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
     
     public String getImei() { return imei; }
     public void setImei(String imei) { this.imei = imei; }

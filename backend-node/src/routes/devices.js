@@ -82,7 +82,7 @@ export default function registerDeviceRoutes(router) {
   router.post('/devices/heartbeat', ah(async (req, res) => {
     const device = await DeviceService.updateHeartbeat(req.body || {});
     if (!device) throw httpError(404, 'Device not found. Please enroll first.');
-    res.json({ status: device.status, message: 'Heartbeat received' });
+    res.json({ status: device.status, message: 'Heartbeat received', device_id: String(device.id) });
   }));
 
   // Delete device + cascade commands/contracts/payments.

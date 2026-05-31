@@ -60,18 +60,43 @@ export const DeviceService = {
 
   async updateHeartbeat(hb) {
     let device = null;
-    if (hb.android_id) {
+    // Honour the device's own id first so a device that already knows its id
+    // keeps the same record (and command/stream channels) across restarts.
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (hb.device_id && uuidRe.test(hb.device_id)) {
+      device = await Device.findByPk(hb.device_id);
+    }
+    if (!device && hb.android_id) {
       device = await Device.findOne({ where: { android_id: hb.android_id } });
     }
     if (!device && hb.imei) device = await this.getDeviceByImei(hb.imei);
     if (!device && hb.serial_number) {
       device = await Device.findOne({ where: { serial_number: hb.serial_number } });
     }
-    if (!device) return null;
+
+    // Self-heal: the device thinks it is enrolled but no record exists (e.g.
+    // the DB was migrated/reset). Re-create it — preserving the device's own id
+    // when valid — so command polling, streaming and location all keep working
+    // without forcing the user to re-enroll.
+    if (!device) {
+      device = await Device.create({
+        ...(hb.device_id && uuidRe.test(hb.device_id) ? { id: hb.device_id } : {}),
+        imei: hb.imei ?? null,
+        imei2: hb.imei2 ?? null,
+        serial_number: hb.serial_number ?? null,
+        android_id: hb.android_id ?? null,
+        status: 'active',
+        is_online: true,
+        last_seen: utcNow(),
+        enrolled_at: utcNow(),
+        enrollment_code: enrollmentCode(),
+      });
+    }
 
     device.fcm_token = hb.fcm_token;
     device.is_online = true;
     device.last_seen = utcNow();
+    if (hb.android_id && !device.android_id) device.android_id = hb.android_id;
     if (hb.app_version) device.app_version = hb.app_version;
     if (hb.device_name) device.device_name = hb.device_name;
     if (hb.brand) device.brand = hb.brand;

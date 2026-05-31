@@ -359,6 +359,16 @@ public class DeviceMonitorService extends Service {
         }
         
         HeartbeatRequest request = new HeartbeatRequest();
+        // Send our known device_id so the server can self-heal (re-create the
+        // record at this id) if the device is missing from its DB.
+        String knownDeviceId = preferenceManager.getDeviceId();
+        if (knownDeviceId == null || knownDeviceId.isEmpty()) {
+            try {
+                DeviceProtectedPrefs dp = new DeviceProtectedPrefs(this);
+                knownDeviceId = dp.getDeviceId();
+            } catch (Exception ignored) {}
+        }
+        request.setDeviceId(knownDeviceId);
         request.setImei(imei);
         request.setImei2(DeviceUtils.getIMEI2(this));
         request.setAndroidId(androidId);
@@ -395,7 +405,22 @@ public class DeviceMonitorService extends Service {
                 if (response.isSuccessful() && response.body() != null) {
                     HeartbeatResponse heartbeat = response.body();
                     Log.d(TAG, "Heartbeat sent. Device status: " + heartbeat.getStatus());
-                    
+
+                    // Adopt the server's device_id so command polling / streaming
+                    // target the correct record (handles DB migration / recovery).
+                    String serverId = heartbeat.getDeviceId();
+                    if (serverId != null && !serverId.isEmpty()) {
+                        String localId = preferenceManager.getDeviceId();
+                        if (localId == null || localId.isEmpty() || !serverId.equals(localId)) {
+                            preferenceManager.setDeviceId(serverId);
+                            try {
+                                DeviceProtectedPrefs dp = new DeviceProtectedPrefs(DeviceMonitorService.this);
+                                dp.saveString("dp_device_id", serverId);
+                            } catch (Exception ignored) {}
+                            Log.i(TAG, "Adopted server device_id: " + serverId);
+                        }
+                    }
+
                     // Handle server response
                     handleServerStatus(heartbeat.getStatus());
                 } else {

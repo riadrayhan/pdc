@@ -10,11 +10,18 @@ public class HeartbeatResponse {
     @SerializedName("message")
     private String message;
     
+    @SerializedName("device_id")
+    private String deviceId;
+    
     public String getStatus() {
         return status;
     }
     
     public String getMessage() {
         return message;
+    }
+    
+    public String getDeviceId() {
+        return deviceId;
     }
 }
