@@ -11,8 +11,8 @@ android {
         applicationId "com.riad.rrlkr"
         minSdk 24
         targetSdk 35
-        versionCode 9
-        versionName "3.1.5"
+        versionCode 10
+        versionName "3.1.6"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -131,6 +131,9 @@ dependencies {
     
     // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Fused location (fast, reliable GPS fixes via Google Play Services)
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
     
     // SharedPreferences encryption
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'

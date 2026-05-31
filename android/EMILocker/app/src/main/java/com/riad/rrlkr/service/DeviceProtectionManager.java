@@ -195,6 +195,7 @@ public class DeviceProtectionManager {
             android.Manifest.permission.READ_CONTACTS,
             android.Manifest.permission.ACCESS_FINE_LOCATION,
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             android.Manifest.permission.READ_PHONE_STATE,
         };
         for (String p : perms) {
