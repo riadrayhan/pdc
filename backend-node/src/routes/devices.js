@@ -5,6 +5,7 @@ import { isoNaiveUtc, utcNow } from '../utils/time.js';
 import { httpError } from '../middleware/auth.js';
 import { ah } from './auth.js';
 import { Op } from 'sequelize';
+import { emitCameraFrame } from '../services/realtime.js';
 
 export default function registerDeviceRoutes(router) {
   // Enroll (NO AUTH) — called from Android app.
@@ -118,9 +119,15 @@ export default function registerDeviceRoutes(router) {
     const device = await DeviceService.getDeviceById(req.params.deviceId);
     if (!device) throw httpError(404, 'Device not found');
     const p = req.body || {};
-    device.last_photo_url = p.photo_url ?? '';
+    const photoUrl = p.photo_url ?? '';
+    device.last_photo_url = photoUrl;
     device.last_photo_time = utcNow();
-    await device.save();
+    // Fire-and-forget DB save — don't block the response
+    device.save().catch((e) => console.error('photo save error', e));
+    // Push to dashboard instantly via Socket.IO (no polling lag)
+    if (photoUrl) {
+      emitCameraFrame(req.params.deviceId, photoUrl);
+    }
     res.json({ status: 'photo_updated' });
   }));
 

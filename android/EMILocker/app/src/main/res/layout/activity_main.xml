@@ -124,9 +124,19 @@
 
     <!-- Buttons -->
     <Button
+        android:id="@+id/btn_device_owner_setup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Setup Device Owner (1-Click)"
+        android:textAllCaps="false"
+        android:backgroundTint="#FF6D00"
+        android:visibility="gone" />
+
+    <Button
         android:id="@+id/btn_activate_admin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="Activate Device Admin"
         android:textAllCaps="false"
         android:backgroundTint="@color/primary" />

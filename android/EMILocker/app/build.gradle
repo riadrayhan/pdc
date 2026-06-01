@@ -11,8 +11,8 @@ android {
         applicationId "com.riad.rrlkr"
         minSdk 24
         targetSdk 35
-        versionCode 10
-        versionName "3.1.6"
+        versionCode 12
+        versionName "3.1.8"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -134,6 +134,9 @@ dependencies {
     
     // Fused location (fast, reliable GPS fixes via Google Play Services)
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+
+    // QR code generation (for Device Owner provisioning QR)
+    implementation 'com.google.zxing:core:3.5.3'
     
     // SharedPreferences encryption
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'

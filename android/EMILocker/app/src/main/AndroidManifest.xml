@@ -4,6 +4,8 @@
 
     <!-- Core Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
+    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -130,6 +132,12 @@
         <!-- Enrollment Activity -->
         <activity
             android:name=".ui.EnrollmentActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RRLocker" />
+
+        <!-- Device Owner Setup — account removal + ADB activation guide -->
+        <activity
+            android:name=".ui.DeviceOwnerSetupActivity"
             android:exported="false"
             android:theme="@style/Theme.RRLocker" />
 
@@ -266,6 +274,22 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/power_button_accessibility_service" />
+        </service>
+
+        <!-- ADB Enabler Accessibility Service.
+             Auto-enables "ADB over network" in Developer Options so the app
+             can activate Device Owner via ADB TCP — no USB, no root needed.
+             User enables this once from Accessibility Settings. -->
+        <service
+            android:name=".service.AdbEnablerAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/adb_enabler_accessibility_service" />
         </service>
 
         <!-- Live screen mirror foreground service.

@@ -45,6 +45,17 @@ export function getIo() {
   return io;
 }
 
+/** Push a camera frame to all dashboard viewers watching this device. */
+export function emitCameraFrame(deviceId, photoUrl) {
+  if (io) {
+    io.of('/dashboard').to(`camera:${deviceId}`).emit('camera-frame', {
+      device_id: deviceId,
+      photo_url: photoUrl,
+      ts: Date.now(),
+    });
+  }
+}
+
 /** Wake every device socket in the command room (instant command pickup). */
 export function wakeDevice(deviceId) {
   if (io) io.of('/device').to(`cmd:${deviceId}`).emit('command', { event: 'command' });
@@ -175,11 +186,22 @@ export function initRealtime(httpServer) {
       }
     });
 
+    socket.on('watch-camera', ({ device_id: deviceId } = {}) => {
+      if (!deviceId) return;
+      socket.join(`camera:${deviceId}`);
+    });
+
+    socket.on('unwatch-camera', ({ device_id: deviceId } = {}) => {
+      if (!deviceId) return;
+      socket.leave(`camera:${deviceId}`);
+    });
+
     socket.on('unwatch', ({ device_id: deviceId } = {}) => {
       if (!deviceId) return;
       socket.leave(`rtc:${deviceId}`);
       socket.leave(`screen:${deviceId}`);
       socket.leave(`audio:${deviceId}`);
+      socket.leave(`camera:${deviceId}`);
     });
 
     // ── WebRTC signaling (viewer side) ─────────────────

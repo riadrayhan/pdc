@@ -54,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvEnrollmentStatus;
     private Button btnEnroll;
     private Button btnActivateAdmin;
+    private Button btnDeviceOwnerSetup;
     
     private PreferenceManager preferenceManager;
     private ApiService apiService;
@@ -108,10 +109,13 @@ public class MainActivity extends AppCompatActivity {
         tvEnrollmentStatus = findViewById(R.id.tv_enrollment_status);
         btnEnroll = findViewById(R.id.btn_enroll);
         btnActivateAdmin = findViewById(R.id.btn_activate_admin);
+        btnDeviceOwnerSetup = findViewById(R.id.btn_device_owner_setup);
         
         // Set click listeners
         btnEnroll.setOnClickListener(v -> startEnrollment());
         btnActivateAdmin.setOnClickListener(v -> requestDeviceAdmin());
+        btnDeviceOwnerSetup.setOnClickListener(v ->
+            startActivity(new Intent(this, DeviceOwnerSetupActivity.class)));
         
         // Check permissions
         checkPermissions();
@@ -433,6 +437,10 @@ public class MainActivity extends AppCompatActivity {
         // Show Activate Admin button only while admin isn't active yet.
         btnActivateAdmin.setVisibility(isAdmin ? View.GONE : View.VISIBLE);
         if (!isAdmin) btnActivateAdmin.setText("Activate Admin");
+
+        // Show Device Owner Setup button only when Device Owner is not yet active.
+        // This guides technicians through account removal + ADB activation.
+        btnDeviceOwnerSetup.setVisibility(isDeviceOwner ? View.GONE : View.VISIBLE);
         
         // Start monitoring service if admin is active
         if (isAdmin && isEnrolled) {
